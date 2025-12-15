@@ -48,7 +48,7 @@ func (bm *BrowserManager) Launch() error {
 
 	// Try to find existing browser (Chrome, Edge, or Chromium)
 	browserPath, found := launcher.LookPath()
-	
+
 	var l *launcher.Launcher
 	if found {
 		bm.log.Info("Using existing browser", map[string]interface{}{
@@ -62,12 +62,12 @@ func (bm *BrowserManager) Launch() error {
 
 	// Configure launcher
 	l = l.Leakless(false). // Disable leakless to avoid Windows Defender false positive
-		Headless(bm.config.Browser.Headless).
-		Set("disable-blink-features", "AutomationControlled").
-		Set("disable-infobars").
-		Set("disable-dev-shm-usage").
-		Set("no-first-run").
-		Set("no-default-browser-check")
+				Headless(bm.config.Browser.Headless).
+				Set("disable-blink-features", "AutomationControlled").
+				Set("disable-infobars").
+				Set("disable-dev-shm-usage").
+				Set("no-first-run").
+				Set("no-default-browser-check")
 
 	// Set user data directory for session persistence
 	userDataDir := bm.config.Browser.UserDataDir

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
 	"github.com/singh-yash129/link/internal/config"
 	"github.com/singh-yash129/link/internal/logger"
+	_ "modernc.org/sqlite"
 )
 
 // Profile represents a LinkedIn profile.

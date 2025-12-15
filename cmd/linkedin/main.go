@@ -388,7 +388,7 @@ func (app *App) runConnectMode() {
 	// If no profiles exist, run a search first
 	if len(profiles) == 0 {
 		app.log.Info("No stored profiles, running search first...", nil)
-		
+
 		// Build search filters from config
 		filters := search.SearchFilters{
 			MaxResults: app.config.Search.MaxResults,
@@ -407,10 +407,10 @@ func (app *App) runConnectMode() {
 			})
 			return
 		}
-		
+
 		// Save search results
 		app.search.SaveResults(results)
-		
+
 		// Convert to storage profiles
 		for _, r := range results {
 			profiles = append(profiles, &storage.Profile{

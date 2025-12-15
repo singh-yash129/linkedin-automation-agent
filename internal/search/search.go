@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
 	"github.com/singh-yash129/link/internal/browser"
 	"github.com/singh-yash129/link/internal/config"
 	"github.com/singh-yash129/link/internal/logger"
@@ -200,25 +201,53 @@ func (sm *SearchManager) connectionLevelToNetwork(level string) string {
 func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	var results []*SearchResult
 
-	// Get all result cards
-	elements, err := sm.browser.GetElements(".entity-result")
-	if err != nil {
-		// Try alternative selector
-		elements, err = sm.browser.GetElements(".reusable-search__result-container")
-		if err != nil {
-			return nil, err
+	// Wait a bit for results to fully render
+	time.Sleep(2 * time.Second)
+
+	// Try multiple selectors for result cards (LinkedIn changes these)
+	selectors := []string{
+		"li.reusable-search__result-container",
+		".entity-result",
+		".reusable-search__result-container",
+		"div[data-chameleon-result-urn]",
+		".search-result__wrapper",
+	}
+
+	var elements rod.Elements
+	var err error
+	for _, selector := range selectors {
+		elements, err = sm.browser.GetElements(selector)
+		if err == nil && len(elements) > 0 {
+			sm.log.Debug("Found results with selector", map[string]interface{}{
+				"selector": selector,
+				"count":    len(elements),
+			})
+			break
 		}
+	}
+
+	if len(elements) == 0 {
+		sm.log.Debug("No results found with any selector", nil)
+		return nil, nil
 	}
 
 	for _, el := range elements {
 		result := &SearchResult{}
 
-		// Extract profile URL
-		linkEl, err := el.Element("a.app-aware-link")
-		if err == nil {
-			href, _ := linkEl.Attribute("href")
-			if href != nil {
-				result.ProfileURL = sm.cleanProfileURL(*href)
+		// Extract profile URL - try multiple selectors
+		linkSelectors := []string{
+			"a.app-aware-link[href*='/in/']",
+			"a[href*='/in/']",
+			".entity-result__title-text a",
+		}
+		for _, sel := range linkSelectors {
+			linkEl, err := el.Element(sel)
+			if err == nil {
+				href, _ := linkEl.Attribute("href")
+				if href != nil && strings.Contains(*href, "/in/") {
+					result.ProfileURL = sm.cleanProfileURL(*href)
+					break
+				}
 			}
 		}
 
@@ -227,25 +256,56 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 			continue
 		}
 
-		// Extract name
-		nameEl, err := el.Element(".entity-result__title-text a span[aria-hidden='true']")
-		if err == nil {
-			result.Name, _ = nameEl.Text()
-			result.Name = strings.TrimSpace(result.Name)
+		// Extract name - try multiple selectors
+		nameSelectors := []string{
+			"span[aria-hidden='true']",
+			".entity-result__title-text span[aria-hidden='true']",
+			".actor-name",
+			"span.entity-result__title-text",
+		}
+		for _, sel := range nameSelectors {
+			nameEl, err := el.Element(sel)
+			if err == nil {
+				text, _ := nameEl.Text()
+				text = strings.TrimSpace(text)
+				if text != "" && !strings.HasPrefix(text, "View") {
+					result.Name = text
+					break
+				}
+			}
 		}
 
 		// Extract title/headline
-		titleEl, err := el.Element(".entity-result__primary-subtitle")
-		if err == nil {
-			result.Title, _ = titleEl.Text()
-			result.Title = strings.TrimSpace(result.Title)
+		titleSelectors := []string{
+			".entity-result__primary-subtitle",
+			".entity-result__summary",
+			".subline-level-1",
+		}
+		for _, sel := range titleSelectors {
+			titleEl, err := el.Element(sel)
+			if err == nil {
+				text, _ := titleEl.Text()
+				result.Title = strings.TrimSpace(text)
+				if result.Title != "" {
+					break
+				}
+			}
 		}
 
 		// Extract location
-		locEl, err := el.Element(".entity-result__secondary-subtitle")
-		if err == nil {
-			result.Location, _ = locEl.Text()
-			result.Location = strings.TrimSpace(result.Location)
+		locSelectors := []string{
+			".entity-result__secondary-subtitle",
+			".subline-level-2",
+		}
+		for _, sel := range locSelectors {
+			locEl, err := el.Element(sel)
+			if err == nil {
+				text, _ := locEl.Text()
+				result.Location = strings.TrimSpace(text)
+				if result.Location != "" {
+					break
+				}
+			}
 		}
 
 		// Extract connection degree
@@ -258,6 +318,10 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 		if result.Name != "" {
 			results = append(results, result)
+			sm.log.Debug("Found profile", map[string]interface{}{
+				"name":  result.Name,
+				"title": result.Title,
+			})
 
 			// Random hover for human-like behavior
 			if sm.stealth.IsWithinSchedule() {

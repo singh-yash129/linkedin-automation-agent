@@ -55,44 +55,44 @@ type LinkedInConfig struct {
 
 // BrowserConfig holds browser-related settings.
 type BrowserConfig struct {
-	Headless        bool     `yaml:"headless"`
-	SlowMotion      int      `yaml:"slow_motion_ms"`
-	Timeout         int      `yaml:"timeout_seconds"`
-	UserDataDir     string   `yaml:"user_data_dir"`
-	UserAgents      []string `yaml:"user_agents"`
-	ViewportWidth   int      `yaml:"viewport_width"`
-	ViewportHeight  int      `yaml:"viewport_height"`
-	DisableImages   bool     `yaml:"disable_images"`
-	ProxyURL        string   `yaml:"proxy_url"`
-	ChromePath      string   `yaml:"chrome_path"`
+	Headless       bool     `yaml:"headless"`
+	SlowMotion     int      `yaml:"slow_motion_ms"`
+	Timeout        int      `yaml:"timeout_seconds"`
+	UserDataDir    string   `yaml:"user_data_dir"`
+	UserAgents     []string `yaml:"user_agents"`
+	ViewportWidth  int      `yaml:"viewport_width"`
+	ViewportHeight int      `yaml:"viewport_height"`
+	DisableImages  bool     `yaml:"disable_images"`
+	ProxyURL       string   `yaml:"proxy_url"`
+	ChromePath     string   `yaml:"chrome_path"`
 }
 
 // StealthConfig holds anti-detection settings.
 type StealthConfig struct {
-	EnableMouseSimulation   bool    `yaml:"enable_mouse_simulation"`
-	EnableTypingSimulation  bool    `yaml:"enable_typing_simulation"`
-	EnableScrollSimulation  bool    `yaml:"enable_scroll_simulation"`
-	EnableHoverEvents       bool    `yaml:"enable_hover_events"`
-	MouseSpeed              float64 `yaml:"mouse_speed"`
-	TypingSpeedWPM          int     `yaml:"typing_speed_wpm"`
-	TypoFrequency           float64 `yaml:"typo_frequency"`
-	ScrollVariation         float64 `yaml:"scroll_variation"`
-	EnableWebDriverMasking  bool    `yaml:"enable_webdriver_masking"`
-	RandomizeFingerprint    bool    `yaml:"randomize_fingerprint"`
-	EnableCanvasNoise       bool    `yaml:"enable_canvas_noise"`
-	EnableWebGLNoise        bool    `yaml:"enable_webgl_noise"`
+	EnableMouseSimulation  bool    `yaml:"enable_mouse_simulation"`
+	EnableTypingSimulation bool    `yaml:"enable_typing_simulation"`
+	EnableScrollSimulation bool    `yaml:"enable_scroll_simulation"`
+	EnableHoverEvents      bool    `yaml:"enable_hover_events"`
+	MouseSpeed             float64 `yaml:"mouse_speed"`
+	TypingSpeedWPM         int     `yaml:"typing_speed_wpm"`
+	TypoFrequency          float64 `yaml:"typo_frequency"`
+	ScrollVariation        float64 `yaml:"scroll_variation"`
+	EnableWebDriverMasking bool    `yaml:"enable_webdriver_masking"`
+	RandomizeFingerprint   bool    `yaml:"randomize_fingerprint"`
+	EnableCanvasNoise      bool    `yaml:"enable_canvas_noise"`
+	EnableWebGLNoise       bool    `yaml:"enable_webgl_noise"`
 }
 
 // SearchConfig holds search-related settings.
 type SearchConfig struct {
-	Keywords      []string `yaml:"keywords"`
-	JobTitles     []string `yaml:"job_titles"`
-	Companies     []string `yaml:"companies"`
-	Locations     []string `yaml:"locations"`
-	MaxResults    int      `yaml:"max_results"`
-	MaxPages      int      `yaml:"max_pages"`
-	FilterBy2nd   bool     `yaml:"filter_by_2nd_degree"`
-	FilterBy3rd   bool     `yaml:"filter_by_3rd_degree"`
+	Keywords    []string `yaml:"keywords"`
+	JobTitles   []string `yaml:"job_titles"`
+	Companies   []string `yaml:"companies"`
+	Locations   []string `yaml:"locations"`
+	MaxResults  int      `yaml:"max_results"`
+	MaxPages    int      `yaml:"max_pages"`
+	FilterBy2nd bool     `yaml:"filter_by_2nd_degree"`
+	FilterBy3rd bool     `yaml:"filter_by_3rd_degree"`
 }
 
 // ConnectionConfig holds connection request settings.
@@ -109,11 +109,11 @@ type ConnectionConfig struct {
 
 // MessagingConfig holds messaging settings.
 type MessagingConfig struct {
-	EnableFollowUp      bool     `yaml:"enable_follow_up"`
-	FollowUpDelayDays   int      `yaml:"follow_up_delay_days"`
-	MessageTemplates    []string `yaml:"message_templates"`
-	MaxMessageLength    int      `yaml:"max_message_length"`
-	DailyMessageLimit   int      `yaml:"daily_message_limit"`
+	EnableFollowUp    bool     `yaml:"enable_follow_up"`
+	FollowUpDelayDays int      `yaml:"follow_up_delay_days"`
+	MessageTemplates  []string `yaml:"message_templates"`
+	MaxMessageLength  int      `yaml:"max_message_length"`
+	DailyMessageLimit int      `yaml:"daily_message_limit"`
 }
 
 // RateLimitConfig holds rate limiting settings.
@@ -153,7 +153,7 @@ type StorageConfig struct {
 
 // LoggingConfig holds logging settings.
 type LoggingConfig struct {
-	Level      string `yaml:"level"` // debug, info, warn, error
+	Level      string `yaml:"level"`  // debug, info, warn, error
 	Format     string `yaml:"format"` // text, json
 	Output     string `yaml:"output"` // stdout, file, both
 	FilePath   string `yaml:"file_path"`
