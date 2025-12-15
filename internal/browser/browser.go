@@ -70,10 +70,20 @@ func (bm *BrowserManager) Launch() error {
 				Set("no-default-browser-check")
 
 	// Set user data directory for session persistence
+	// Use a unique directory to avoid conflicts with running Chrome instances
 	userDataDir := bm.config.Browser.UserDataDir
 	if userDataDir == "" {
-		userDataDir = filepath.Join(dataDir, "chrome-data")
+		userDataDir = filepath.Join(dataDir, "browser")
 	}
+
+	// Check if the profile is locked (another Chrome is using it)
+	lockFile := filepath.Join(userDataDir, "SingletonLock")
+	if _, err := os.Stat(lockFile); err == nil {
+		bm.log.Warn("Browser profile may be locked, trying with fresh profile", nil)
+		// Use a timestamped directory to avoid conflicts
+		userDataDir = filepath.Join(dataDir, fmt.Sprintf("browser-%d", time.Now().Unix()))
+	}
+
 	l = l.UserDataDir(userDataDir)
 
 	// Set proxy if configured
@@ -81,10 +91,30 @@ func (bm *BrowserManager) Launch() error {
 		l = l.Proxy(bm.config.Browser.ProxyURL)
 	}
 
-	// Launch browser
-	url, err := l.Launch()
+	// Launch browser with retry
+	var url string
+	var err error
+	for attempt := 1; attempt <= 3; attempt++ {
+		url, err = l.Launch()
+		if err == nil {
+			break
+		}
+		bm.log.Warn("Browser launch attempt failed", map[string]interface{}{
+			"attempt": attempt,
+			"error":   err.Error(),
+		})
+
+		// If failed, try killing any existing Chrome processes using the debug port
+		if attempt < 3 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+			// Try with a different user data directory
+			userDataDir = filepath.Join(dataDir, fmt.Sprintf("browser-%d", time.Now().UnixNano()))
+			l = l.UserDataDir(userDataDir)
+		}
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to launch browser: %w", err)
+		return fmt.Errorf("failed to launch browser after 3 attempts: %w (try closing other Chrome windows)", err)
 	}
 
 	// Connect to browser
