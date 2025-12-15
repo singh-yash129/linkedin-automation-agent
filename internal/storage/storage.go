@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"github.com/singh-yash129/link/internal/config"
 	"github.com/singh-yash129/link/internal/logger"
 )
