@@ -46,9 +46,22 @@ func (bm *BrowserManager) Launch() error {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
+	// Try to find existing browser (Chrome, Edge, or Chromium)
+	browserPath, found := launcher.LookPath()
+	
+	var l *launcher.Launcher
+	if found {
+		bm.log.Info("Using existing browser", map[string]interface{}{
+			"path": browserPath,
+		})
+		l = launcher.New().Bin(browserPath)
+	} else {
+		bm.log.Info("No existing browser found, will download Chromium", nil)
+		l = launcher.New()
+	}
+
 	// Configure launcher
-	l := launcher.New().
-		Leakless(false). // Disable leakless to avoid Windows Defender false positive
+	l = l.Leakless(false). // Disable leakless to avoid Windows Defender false positive
 		Headless(bm.config.Browser.Headless).
 		Set("disable-blink-features", "AutomationControlled").
 		Set("disable-infobars").
