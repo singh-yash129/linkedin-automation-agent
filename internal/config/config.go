@@ -42,6 +42,9 @@ type Config struct {
 
 	// Logging configuration
 	Logging LoggingConfig `yaml:"logging"`
+
+	// DryRun mode - simulate without performing actions
+	DryRun bool `yaml:"-"`
 }
 
 // LinkedInConfig holds LinkedIn authentication settings.

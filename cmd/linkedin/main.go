@@ -50,6 +50,9 @@ func main() {
 	headless := flag.Bool("headless", false, "Run in headless mode")
 	debug := flag.Bool("debug", false, "Enable debug logging")
 	version := flag.Bool("version", false, "Show version information")
+	keywords := flag.String("keywords", "", "Search keywords (overrides config)")
+	limit := flag.Int("limit", 0, "Limit number of operations (0 = use config)")
+	dryRun := flag.Bool("dry-run", false, "Simulate actions without actually performing them")
 	flag.Parse()
 
 	// Show version
@@ -78,6 +81,14 @@ func main() {
 	if *debug {
 		cfg.Logging.Level = "debug"
 	}
+	if *keywords != "" {
+		cfg.Search.Keywords = []string{*keywords}
+	}
+	if *limit > 0 {
+		cfg.Connection.DailyLimit = *limit
+		cfg.Connection.HourlyLimit = *limit
+	}
+	cfg.DryRun = *dryRun
 
 	// Initialize logger
 	log := logger.New(cfg.Logging.Level)
@@ -354,7 +365,9 @@ func (app *App) runSearchMode() {
 
 // runConnectMode runs only the connection phase.
 func (app *App) runConnectMode() {
-	app.log.Info("Running connection mode", nil)
+	app.log.Info("Running connection mode", map[string]interface{}{
+		"dry_run": app.config.DryRun,
+	})
 
 	if err := app.login(); err != nil {
 		app.log.Error("Login failed", map[string]interface{}{
@@ -363,13 +376,51 @@ func (app *App) runConnectMode() {
 		return
 	}
 
-	// Get profiles from storage
+	// Check if we have profiles, if not run a search first
 	profiles, err := app.storage.GetAllProfiles()
 	if err != nil {
 		app.log.Error("Failed to get profiles", map[string]interface{}{
 			"error": err.Error(),
 		})
 		return
+	}
+
+	// If no profiles exist, run a search first
+	if len(profiles) == 0 {
+		app.log.Info("No stored profiles, running search first...", nil)
+		
+		// Build search filters from config
+		filters := search.SearchFilters{
+			MaxResults: app.config.Search.MaxResults,
+		}
+		if len(app.config.Search.Keywords) > 0 {
+			filters.Keywords = app.config.Search.Keywords[0]
+		}
+		if len(app.config.Search.Locations) > 0 {
+			filters.Location = app.config.Search.Locations[0]
+		}
+
+		results, err := app.search.Search(filters)
+		if err != nil {
+			app.log.Error("Search failed", map[string]interface{}{
+				"error": err.Error(),
+			})
+			return
+		}
+		
+		// Save search results
+		app.search.SaveResults(results)
+		
+		// Convert to storage profiles
+		for _, r := range results {
+			profiles = append(profiles, &storage.Profile{
+				ProfileURL: r.ProfileURL,
+				Name:       r.Name,
+				Title:      r.Title,
+				Company:    r.Company,
+				Location:   r.Location,
+			})
+		}
 	}
 
 	// Convert to search results for connection manager
@@ -396,6 +447,19 @@ func (app *App) runConnectMode() {
 	app.log.Info("Found profiles to connect", map[string]interface{}{
 		"count": len(searchResults),
 	})
+
+	// Dry-run mode - just show what would happen
+	if app.config.DryRun {
+		app.log.Info("DRY RUN - Would send connection requests to:", nil)
+		for i, r := range searchResults {
+			fmt.Printf("  %d. %s (%s)\n", i+1, r.Name, r.Title)
+			if i >= app.config.Connection.DailyLimit-1 {
+				break
+			}
+		}
+		app.cleanup()
+		return
+	}
 
 	// Send connections
 	note := ""
