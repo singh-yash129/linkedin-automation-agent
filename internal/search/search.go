@@ -383,7 +383,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	// If we found results but no real URLs, try clicking on each result to get real URL
 	if len(results) > 0 && len(elements) > 0 {
 		sm.log.Info("Found profiles but URLs hidden by LinkedIn. Attempting to get real URLs by clicking...", nil)
-		
+
 		originalURL, _ := sm.browser.GetCurrentURL()
 
 		for i, el := range elements {
@@ -398,7 +398,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 			// Try clicking on the element itself or its clickable children
 			clicked := false
-			
+
 			// First try clicking the whole card area
 			cardSelectors := []string{
 				".linked-area",
@@ -412,7 +412,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 				if err != nil {
 					continue
 				}
-				
+
 				// Try to click
 				err = linkEl.Click(proto.InputMouseButtonLeft, 1)
 				if err != nil {
@@ -422,7 +422,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 					})
 					continue
 				}
-				
+
 				clicked = true
 				time.Sleep(3 * time.Second)
 
@@ -431,18 +431,18 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 				sm.log.Debug("After click, current URL", map[string]interface{}{
 					"url": currentURL,
 				})
-				
+
 				if strings.Contains(currentURL, "/in/") {
 					results[i].ProfileURL = sm.cleanProfileURL(currentURL)
 					sm.log.Info("Got real profile URL", map[string]interface{}{
 						"name": results[i].Name,
 						"url":  results[i].ProfileURL,
 					})
-					
+
 					// Go back to search results
 					sm.browser.Navigate(originalURL)
 					time.Sleep(2 * time.Second)
-					
+
 					// Re-fetch elements since page reloaded
 					elements, _ = sm.browser.GetElements("div[data-chameleon-result-urn]")
 					break
@@ -454,7 +454,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 				}
 				break
 			}
-			
+
 			if !clicked {
 				sm.log.Debug("Could not click on result", map[string]interface{}{
 					"index": i + 1,

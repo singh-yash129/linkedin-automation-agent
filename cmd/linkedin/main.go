@@ -114,7 +114,18 @@ func main() {
 	// Setup graceful shutdown
 	app.setupShutdown()
 
-	// Run based on mode
+	// Run based on mode with graceful degradation
+	// Use defer/recover to handle panics gracefully
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("Application panic recovered", map[string]interface{}{
+				"panic": fmt.Sprintf("%v", r),
+			})
+			app.cleanup()
+			os.Exit(1)
+		}
+	}()
+
 	switch *mode {
 	case "full":
 		app.runFullMode()

@@ -706,7 +706,146 @@ func (sm *StealthManager) RandomHover(page *rod.Page) error {
 }
 
 // ============================================================================
-// TECHNIQUE 7: Activity Scheduling
+// TECHNIQUE 7: Natural Cursor Wandering
+// ============================================================================
+
+// WanderMouse performs random cursor movements to simulate natural idle behavior.
+// This prevents detection by making the cursor move naturally while waiting for page loads.
+func (sm *StealthManager) WanderMouse(page *rod.Page, duration time.Duration) error {
+	if !sm.config.Stealth.EnableMouseSimulation {
+		return nil
+	}
+
+	sm.log.Debug("Starting cursor wander", map[string]interface{}{
+		"duration_ms": duration.Milliseconds(),
+	})
+
+	// Get viewport size
+	result, err := page.Eval(`({width: window.innerWidth, height: window.innerHeight})`)
+	if err != nil {
+		return err
+	}
+	width := result.Value.Get("width").Num()
+	height := result.Value.Get("height").Num()
+
+	endTime := time.Now().Add(duration)
+	currentX := sm.randomFloat(100, width-100)
+	currentY := sm.randomFloat(100, height-100)
+
+	// Perform random movements until duration elapsed
+	for time.Now().Before(endTime) {
+		// Generate a small random movement (not too far from current position)
+		newX := currentX + sm.randomFloat(-50, 50)
+		newY := currentY + sm.randomFloat(-30, 30)
+
+		// Keep within bounds with padding
+		newX = math.Max(50, math.Min(newX, width-50))
+		newY = math.Max(50, math.Min(newY, height-50))
+
+		// Move with slight curve (not straight line)
+		path := sm.generateBezierPath(currentX, currentY, newX, newY)
+		for _, point := range path {
+			if err := page.Mouse.MoveTo(proto.Point{X: point.X, Y: point.Y}); err != nil {
+				return err
+			}
+			time.Sleep(time.Duration(sm.randomInt(5, 15)) * time.Millisecond)
+		}
+
+		currentX, currentY = newX, newY
+
+		// Random pause between movements
+		time.Sleep(sm.randomDuration(100, 500))
+	}
+
+	return nil
+}
+
+// IdleMovement performs subtle cursor movements during idle periods.
+// Simulates the small movements a person makes while reading or thinking.
+func (sm *StealthManager) IdleMovement(page *rod.Page) error {
+	return sm.WanderMouse(page, sm.randomDuration(500, 2000))
+}
+
+// ============================================================================
+// TECHNIQUE 8: Retry Logic with Exponential Backoff
+// ============================================================================
+
+// RetryConfig holds configuration for retry operations.
+type RetryConfig struct {
+	MaxRetries     int
+	InitialDelay   time.Duration
+	MaxDelay       time.Duration
+	BackoffFactor  float64
+	RetryableError func(error) bool
+}
+
+// DefaultRetryConfig returns sensible defaults for retry operations.
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxRetries:     3,
+		InitialDelay:   1 * time.Second,
+		MaxDelay:       30 * time.Second,
+		BackoffFactor:  2.0,
+		RetryableError: func(err error) bool { return true }, // Retry all errors by default
+	}
+}
+
+// Retry executes a function with exponential backoff retry logic.
+// This is essential for handling transient network errors and element loading issues.
+func (sm *StealthManager) Retry(operation func() error, cfg RetryConfig) error {
+	var lastErr error
+	delay := cfg.InitialDelay
+
+	for attempt := 0; attempt <= cfg.MaxRetries; attempt++ {
+		if attempt > 0 {
+			sm.log.Debug("Retrying operation", map[string]interface{}{
+				"attempt":  attempt,
+				"delay_ms": delay.Milliseconds(),
+			})
+			time.Sleep(delay)
+
+			// Calculate next delay with exponential backoff
+			delay = time.Duration(float64(delay) * cfg.BackoffFactor)
+			if delay > cfg.MaxDelay {
+				delay = cfg.MaxDelay
+			}
+		}
+
+		lastErr = operation()
+		if lastErr == nil {
+			if attempt > 0 {
+				sm.log.Debug("Operation succeeded after retry", map[string]interface{}{
+					"attempts": attempt + 1,
+				})
+			}
+			return nil
+		}
+
+		// Check if error is retryable
+		if !cfg.RetryableError(lastErr) {
+			sm.log.Debug("Error is not retryable", map[string]interface{}{
+				"error": lastErr.Error(),
+			})
+			return lastErr
+		}
+
+		sm.log.Warn("Operation failed, will retry", map[string]interface{}{
+			"attempt":  attempt + 1,
+			"maxRetry": cfg.MaxRetries,
+			"error":    lastErr.Error(),
+		})
+	}
+
+	return fmt.Errorf("operation failed after %d retries: %w", cfg.MaxRetries+1, lastErr)
+}
+
+// RetryWithDefault executes a function with default retry configuration.
+func (sm *StealthManager) RetryWithDefault(operation func() error) error {
+	return sm.Retry(operation, DefaultRetryConfig())
+}
+
+// ============================================================================
+// TECHNIQUE 9: Activity Scheduling
 // ============================================================================
 
 // IsWithinSchedule checks if current time is within allowed activity hours.
