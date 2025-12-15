@@ -93,8 +93,8 @@ func (am *AuthManager) IsLoggedIn() bool {
 		return false
 	}
 
-	// Wait for page to stabilize
-	time.Sleep(2 * time.Second)
+	// Wait for page to stabilize (increased for slow connections)
+	time.Sleep(4 * time.Second)
 
 	// Get current URL
 	currentURL, err := am.browser.GetCurrentURL()
@@ -103,9 +103,15 @@ func (am *AuthManager) IsLoggedIn() bool {
 	}
 
 	// Check if redirected to login
-	if strings.Contains(currentURL, "/login") {
+	if strings.Contains(currentURL, "/login") || strings.Contains(currentURL, "/authwall") {
 		am.log.Debug("Not logged in - redirected to login page", nil)
 		return false
+	}
+
+	// Check for feed URL (indicates logged in)
+	if strings.Contains(currentURL, "/feed") {
+		am.log.Info("Active session found", nil)
+		return true
 	}
 
 	// Check for nav bar (indicates logged in state)
@@ -356,11 +362,12 @@ func (am *AuthManager) WaitForManualVerification(timeout time.Duration) error {
 
 // GetSessionInfo returns information about the current session.
 func (am *AuthManager) GetSessionInfo() map[string]interface{} {
+	loggedIn := am.IsLoggedIn()
 	info := map[string]interface{}{
-		"logged_in": am.IsLoggedIn(),
+		"logged_in": loggedIn,
 	}
 
-	if am.IsLoggedIn() {
+	if loggedIn {
 		currentURL, _ := am.browser.GetCurrentURL()
 		info["current_url"] = currentURL
 
