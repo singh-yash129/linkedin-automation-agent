@@ -93,11 +93,22 @@ func (sm *SearchManager) Search(filters SearchFilters) ([]*SearchResult, error) 
 			"targetResults": maxResults,
 		})
 
-		// Wait for results to load
+		// Wait for results container to load
 		if err := sm.browser.WaitForElement(".search-results-container", 10*time.Second); err != nil {
 			sm.log.Warn("Search results not found, may be end of results", nil)
 			break
 		}
+
+		// Scroll down to trigger lazy loading of profile links
+		sm.log.Debug("Scrolling to load lazy content", nil)
+		rodPage := sm.browser.GetPage()
+		for i := 0; i < 3; i++ {
+			rodPage.Mouse.Scroll(0, 500, 1)
+			time.Sleep(500 * time.Millisecond)
+		}
+		// Scroll back up
+		rodPage.Mouse.Scroll(0, -1000, 1)
+		time.Sleep(1 * time.Second)
 
 		// Extract results from current page
 		results, err := sm.extractSearchResults()
@@ -204,6 +215,67 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	// Wait a bit for results to fully render
 	time.Sleep(2 * time.Second)
 
+	// First approach: find all profile links on the page directly
+	page := sm.browser.GetPage()
+	allPageLinks, err := page.Elements("a[href*='/in/']")
+	if err == nil && len(allPageLinks) > 0 {
+		sm.log.Debug("Found profile links on page", map[string]interface{}{
+			"count": len(allPageLinks),
+		})
+		
+		seenURLs := make(map[string]bool)
+		for _, link := range allPageLinks {
+			href, _ := link.Attribute("href")
+			if href == nil || !strings.Contains(*href, "/in/") {
+				continue
+			}
+			
+			profileURL := sm.cleanProfileURL(*href)
+			if profileURL == "" || seenURLs[profileURL] {
+				continue
+			}
+			seenURLs[profileURL] = true
+			
+			result := &SearchResult{
+				ProfileURL: profileURL,
+			}
+			
+			// Try to get the name from the link text
+			text, _ := link.Text()
+			text = strings.TrimSpace(text)
+			if text != "" && len(text) < 100 && !strings.HasPrefix(text, "View") {
+				result.Name = text
+			}
+			
+			// Try to get parent container for more info
+			parent, err := link.Parent()
+			if err == nil {
+				// Look for title in nearby elements
+				titleEl, err := parent.Element(".entity-result__primary-subtitle, .artdeco-entity-lockup__subtitle")
+				if err == nil {
+					title, _ := titleEl.Text()
+					result.Title = strings.TrimSpace(title)
+				}
+			}
+			
+			if result.Name != "" {
+				results = append(results, result)
+				sm.log.Debug("Extracted profile", map[string]interface{}{
+					"name":  result.Name,
+					"url":   result.ProfileURL,
+					"title": result.Title,
+				})
+			}
+		}
+		
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+
+	// Fallback: Try container-based approach
+	sm.log.Debug("Trying container-based extraction", nil)
+	
 	// Try multiple selectors for result cards (LinkedIn changes these)
 	selectors := []string{
 		"li.reusable-search__result-container",
@@ -214,7 +286,6 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	}
 
 	var elements rod.Elements
-	var err error
 	for _, selector := range selectors {
 		elements, err = sm.browser.GetElements(selector)
 		if err == nil && len(elements) > 0 {
@@ -253,8 +324,8 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 		if result.ProfileURL == "" {
 			// Debug: log what we found in this element
 			html, _ := el.HTML()
-			if len(html) > 200 {
-				html = html[:200]
+			if len(html) > 500 {
+				html = html[:500]
 			}
 			sm.log.Debug("No profile URL found in element", map[string]interface{}{
 				"html_preview": html,
