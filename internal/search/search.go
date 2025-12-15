@@ -234,18 +234,16 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	for _, el := range elements {
 		result := &SearchResult{}
 
-		// Extract profile URL - try multiple selectors
-		linkSelectors := []string{
-			"a.app-aware-link[href*='/in/']",
-			"a[href*='/in/']",
-			".entity-result__title-text a",
-		}
-		for _, sel := range linkSelectors {
-			linkEl, err := el.Element(sel)
-			if err == nil {
-				href, _ := linkEl.Attribute("href")
+		// First, try to get ALL links in this element and find one with /in/
+		allLinks, err := el.Elements("a")
+		if err == nil {
+			for _, link := range allLinks {
+				href, _ := link.Attribute("href")
 				if href != nil && strings.Contains(*href, "/in/") {
 					result.ProfileURL = sm.cleanProfileURL(*href)
+					sm.log.Debug("Found profile link", map[string]interface{}{
+						"url": result.ProfileURL,
+					})
 					break
 				}
 			}
@@ -253,6 +251,14 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 		// Skip if no valid profile URL
 		if result.ProfileURL == "" {
+			// Debug: log what we found in this element
+			html, _ := el.HTML()
+			if len(html) > 200 {
+				html = html[:200]
+			}
+			sm.log.Debug("No profile URL found in element", map[string]interface{}{
+				"html_preview": html,
+			})
 			continue
 		}
 
@@ -262,15 +268,31 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 			".entity-result__title-text span[aria-hidden='true']",
 			".actor-name",
 			"span.entity-result__title-text",
+			".artdeco-entity-lockup__title span[aria-hidden='true']",
 		}
 		for _, sel := range nameSelectors {
 			nameEl, err := el.Element(sel)
 			if err == nil {
 				text, _ := nameEl.Text()
 				text = strings.TrimSpace(text)
-				if text != "" && !strings.HasPrefix(text, "View") {
+				if text != "" && !strings.HasPrefix(text, "View") && len(text) < 100 {
 					result.Name = text
 					break
+				}
+			}
+		}
+
+		// If no name found, try getting text from the profile link itself
+		if result.Name == "" {
+			for _, link := range allLinks {
+				href, _ := link.Attribute("href")
+				if href != nil && strings.Contains(*href, "/in/") {
+					text, _ := link.Text()
+					text = strings.TrimSpace(text)
+					if text != "" && len(text) < 100 {
+						result.Name = text
+						break
+					}
 				}
 			}
 		}
@@ -280,6 +302,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 			".entity-result__primary-subtitle",
 			".entity-result__summary",
 			".subline-level-1",
+			".artdeco-entity-lockup__subtitle",
 		}
 		for _, sel := range titleSelectors {
 			titleEl, err := el.Element(sel)
@@ -296,6 +319,7 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 		locSelectors := []string{
 			".entity-result__secondary-subtitle",
 			".subline-level-2",
+			".artdeco-entity-lockup__caption",
 		}
 		for _, sel := range locSelectors {
 			locEl, err := el.Element(sel)
