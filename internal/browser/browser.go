@@ -48,6 +48,7 @@ func (bm *BrowserManager) Launch() error {
 
 	// Configure launcher
 	l := launcher.New().
+		Leakless(false). // Disable leakless to avoid Windows Defender false positive
 		Headless(bm.config.Browser.Headless).
 		Set("disable-blink-features", "AutomationControlled").
 		Set("disable-infobars").
