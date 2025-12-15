@@ -161,12 +161,28 @@ func (sm *SearchManager) Search(filters SearchFilters) ([]*SearchResult, error) 
 }
 
 // buildSearchURL constructs the LinkedIn search URL with filters.
+// LinkedIn uses a complex URL structure with encoded filters.
 func (sm *SearchManager) buildSearchURL(filters SearchFilters) string {
 	baseURL := "https://www.linkedin.com/search/results/people/?"
 	params := url.Values{}
 
+	// Build keywords - combine all filter terms for broader search
+	var keywordParts []string
 	if filters.Keywords != "" {
-		params.Add("keywords", filters.Keywords)
+		keywordParts = append(keywordParts, filters.Keywords)
+	}
+	if filters.Title != "" {
+		keywordParts = append(keywordParts, filters.Title)
+	}
+	if filters.Company != "" {
+		keywordParts = append(keywordParts, filters.Company)
+	}
+	if filters.Location != "" {
+		keywordParts = append(keywordParts, filters.Location)
+	}
+
+	if len(keywordParts) > 0 {
+		params.Add("keywords", strings.Join(keywordParts, " "))
 	}
 
 	// Add network filter (connection level)
@@ -175,16 +191,6 @@ func (sm *SearchManager) buildSearchURL(filters SearchFilters) string {
 		if network != "" {
 			params.Add("network", network)
 		}
-	}
-
-	// Geographic region (would need mapping to LinkedIn geo IDs)
-	if filters.Location != "" {
-		params.Add("geoUrn", filters.Location)
-	}
-
-	// Company filter
-	if filters.Company != "" {
-		params.Add("company", filters.Company)
 	}
 
 	// Origin
@@ -218,75 +224,23 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 	page := sm.browser.GetPage()
 
-	// First approach: find all profile links on the page directly
-	allPageLinks, err := page.Elements("a[href*='/in/']")
-	if err == nil && len(allPageLinks) > 0 {
-		sm.log.Debug("Found profile links on page", map[string]interface{}{
-			"count": len(allPageLinks),
-		})
-
-		seenURLs := make(map[string]bool)
-		for _, link := range allPageLinks {
-			href, _ := link.Attribute("href")
-			if href == nil || !strings.Contains(*href, "/in/") {
-				continue
-			}
-
-			profileURL := sm.cleanProfileURL(*href)
-			if profileURL == "" || seenURLs[profileURL] {
-				continue
-			}
-			seenURLs[profileURL] = true
-
-			result := &SearchResult{
-				ProfileURL: profileURL,
-			}
-
-			// Try to get the name from the link text
-			text, _ := link.Text()
-			text = strings.TrimSpace(text)
-			if text != "" && len(text) < 100 && !strings.HasPrefix(text, "View") {
-				result.Name = text
-			}
-
-			// Try to get parent container for more info
-			parent, err := link.Parent()
-			if err == nil {
-				// Look for title in nearby elements
-				titleEl, err := parent.Element(".entity-result__primary-subtitle, .artdeco-entity-lockup__subtitle")
-				if err == nil {
-					title, _ := titleEl.Text()
-					result.Title = strings.TrimSpace(title)
-				}
-			}
-
-			if result.Name != "" {
-				results = append(results, result)
-				sm.log.Debug("Extracted profile", map[string]interface{}{
-					"name":  result.Name,
-					"url":   result.ProfileURL,
-					"title": result.Title,
-				})
-			}
-		}
-
-		if len(results) > 0 {
-			return results, nil
-		}
+	// Scroll to load all content
+	for i := 0; i < 5; i++ {
+		page.Mouse.Scroll(0, 400, 1)
+		time.Sleep(300 * time.Millisecond)
 	}
-
-	// LinkedIn hides actual profile URLs in search results for non-connections
-	// Extract available info (name, title, location) from result cards
-	sm.log.Debug("No /in/ links found - extracting from result cards (URLs hidden by LinkedIn)", nil)
+	page.Mouse.Scroll(0, -2000, 1)
+	time.Sleep(1 * time.Second)
 
 	// Try multiple selectors for result cards
 	selectors := []string{
 		"li.reusable-search__result-container",
+		"div.entity-result",
 		"div[data-chameleon-result-urn]",
-		".entity-result",
 	}
 
 	var elements rod.Elements
+	var err error
 	for _, selector := range selectors {
 		elements, err = sm.browser.GetElements(selector)
 		if err == nil && len(elements) > 0 {
@@ -302,21 +256,26 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 		return nil, nil
 	}
 
+	// Save original URL to return to
+	originalURL, _ := sm.browser.GetCurrentURL()
+
 	for i, el := range elements {
 		result := &SearchResult{}
 
-		// Extract name - could be "LinkedIn Member" for hidden profiles
+		// Extract name from various selectors
 		nameSelectors := []string{
+			"span.entity-result__title-text a span[aria-hidden='true']",
 			".entity-result__title-text a",
-			"span.OBDoCEaFoHfgOsoYmliCTluEBnJPTUHbZw a",
-			".t-16 a",
+			"a.app-aware-link span[aria-hidden='true']",
+			".t-16 a span",
+			"span[dir='ltr'] > span[aria-hidden='true']",
 		}
 		for _, sel := range nameSelectors {
 			nameEl, err := el.Element(sel)
 			if err == nil {
 				text, _ := nameEl.Text()
 				text = strings.TrimSpace(text)
-				if text != "" && len(text) < 100 {
+				if text != "" && len(text) < 100 && text != "View" && !strings.HasPrefix(text, "View ") {
 					result.Name = text
 					break
 				}
@@ -325,8 +284,8 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 		// Extract title/headline
 		titleSelectors := []string{
-			".kQbDCiVfkfjYkfnWKOnBYxRirRwWOBSJEw",
 			".entity-result__primary-subtitle",
+			"div.entity-result__primary-subtitle",
 			".t-14.t-black.t-normal",
 		}
 		for _, sel := range titleSelectors {
@@ -342,9 +301,9 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 		// Extract location
 		locSelectors := []string{
-			".EQMTllrWLFonnbxJxKgwmCjjBTnZEHWLWQvbs",
 			".entity-result__secondary-subtitle",
-			".t-14.t-normal:not(.t-black)",
+			"div.entity-result__secondary-subtitle",
+			".t-14.t-normal.t-black--light",
 		}
 		for _, sel := range locSelectors {
 			locEl, err := el.Element(sel)
@@ -357,13 +316,86 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 			}
 		}
 
-		// Skip if we got nothing useful
-		if result.Title == "" && result.Name == "" {
-			continue
+		// Try to get profile URL by clicking on the name link
+		linkSelectors := []string{
+			"a.app-aware-link[href*='/in/']",
+			".entity-result__title-text a[href*='/in/']",
+			"a[href*='/in/']",
 		}
 
-		// Generate a placeholder URL based on position (will need to click to get real URL)
-		result.ProfileURL = fmt.Sprintf("search-result-%d", i+1)
+		profileURL := ""
+		for _, sel := range linkSelectors {
+			linkEl, err := el.Element(sel)
+			if err == nil {
+				href, _ := linkEl.Attribute("href")
+				if href != nil && strings.Contains(*href, "/in/") {
+					profileURL = sm.cleanProfileURL(*href)
+					break
+				}
+			}
+		}
+
+		// If still no URL, try clicking to navigate
+		if profileURL == "" || profileURL == "https://www.linkedin.com" {
+			sm.log.Debug("No direct URL found, attempting to click", map[string]interface{}{
+				"index": i + 1,
+				"name":  result.Name,
+			})
+
+			// Click on the name/title link
+			clickSelectors := []string{
+				"a.app-aware-link",
+				".entity-result__title-text a",
+				"a[href*='/in/']",
+			}
+
+			for _, sel := range clickSelectors {
+				linkEl, err := el.Element(sel)
+				if err != nil {
+					continue
+				}
+
+				err = linkEl.Click(proto.InputMouseButtonLeft, 1)
+				if err != nil {
+					continue
+				}
+
+				time.Sleep(2 * time.Second)
+
+				currentURL, _ := sm.browser.GetCurrentURL()
+				if strings.Contains(currentURL, "/in/") {
+					profileURL = sm.cleanProfileURL(currentURL)
+					sm.log.Debug("Got URL by clicking", map[string]interface{}{
+						"url": profileURL,
+					})
+
+					// Go back to search
+					sm.browser.Navigate(originalURL)
+					time.Sleep(2 * time.Second)
+
+					// Re-fetch elements
+					for _, selector := range selectors {
+						elements, _ = sm.browser.GetElements(selector)
+						if len(elements) > 0 {
+							break
+						}
+					}
+					break
+				} else {
+					// Go back if we navigated somewhere else
+					sm.browser.Navigate(originalURL)
+					time.Sleep(1 * time.Second)
+				}
+				break
+			}
+		}
+
+		result.ProfileURL = profileURL
+
+		// Skip if we got nothing useful
+		if result.Name == "" && result.Title == "" {
+			continue
+		}
 
 		// If name is hidden, use title as identifier
 		if result.Name == "" || result.Name == "LinkedIn Member" {
@@ -373,94 +405,12 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 		}
 
 		results = append(results, result)
-		sm.log.Debug("Extracted profile (URL hidden)", map[string]interface{}{
+		sm.log.Debug("Extracted profile", map[string]interface{}{
 			"name":     result.Name,
 			"title":    result.Title,
 			"location": result.Location,
+			"url":      result.ProfileURL,
 		})
-	}
-
-	// If we found results but no real URLs, try clicking on each result to get real URL
-	if len(results) > 0 && len(elements) > 0 {
-		sm.log.Info("Found profiles but URLs hidden by LinkedIn. Attempting to get real URLs by clicking...", nil)
-
-		originalURL, _ := sm.browser.GetCurrentURL()
-
-		for i, el := range elements {
-			if i >= len(results) || i >= 5 { // Limit to first 5
-				break
-			}
-
-			sm.log.Debug("Clicking on result to get URL", map[string]interface{}{
-				"index": i + 1,
-				"name":  results[i].Name,
-			})
-
-			// Try clicking on the element itself or its clickable children
-			clicked := false
-
-			// First try clicking the whole card area
-			cardSelectors := []string{
-				".linked-area",
-				".entity-result__content",
-				"a[data-test-app-aware-link]",
-				"a",
-			}
-
-			for _, sel := range cardSelectors {
-				linkEl, err := el.Element(sel)
-				if err != nil {
-					continue
-				}
-
-				// Try to click
-				err = linkEl.Click(proto.InputMouseButtonLeft, 1)
-				if err != nil {
-					sm.log.Debug("Click failed", map[string]interface{}{
-						"selector": sel,
-						"error":    err.Error(),
-					})
-					continue
-				}
-
-				clicked = true
-				time.Sleep(3 * time.Second)
-
-				// Get current URL
-				currentURL, _ := sm.browser.GetCurrentURL()
-				sm.log.Debug("After click, current URL", map[string]interface{}{
-					"url": currentURL,
-				})
-
-				if strings.Contains(currentURL, "/in/") {
-					results[i].ProfileURL = sm.cleanProfileURL(currentURL)
-					sm.log.Info("Got real profile URL", map[string]interface{}{
-						"name": results[i].Name,
-						"url":  results[i].ProfileURL,
-					})
-
-					// Go back to search results
-					sm.browser.Navigate(originalURL)
-					time.Sleep(2 * time.Second)
-
-					// Re-fetch elements since page reloaded
-					elements, _ = sm.browser.GetElements("div[data-chameleon-result-urn]")
-					break
-				} else {
-					// Didn't navigate to profile, try going back anyway
-					sm.browser.Navigate(originalURL)
-					time.Sleep(1 * time.Second)
-					elements, _ = sm.browser.GetElements("div[data-chameleon-result-urn]")
-				}
-				break
-			}
-
-			if !clicked {
-				sm.log.Debug("Could not click on result", map[string]interface{}{
-					"index": i + 1,
-				})
-			}
-		}
 	}
 
 	return results, nil
