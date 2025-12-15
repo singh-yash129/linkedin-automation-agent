@@ -1,0 +1,47 @@
+# Binaries
+linkedin-tool
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files (contain secrets)
+.env
+*.env.local
+
+# Config files with real credentials
+config.yaml
+!config.yaml.example
+
+# Runtime data
+data/
+logs/
+
+# Screenshots
+*.png
+*.jpg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Debug files
+debug/
+__debug_bin

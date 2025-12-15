@@ -1,0 +1,116 @@
+# LinkedIn Automation Tool Configuration
+# Copy this file to config.yaml and customize for your needs
+
+# LinkedIn Credentials (use environment variables for security)
+linkedin:
+  email: ""  # Set via LINKEDIN_EMAIL environment variable
+  password: ""  # Set via LINKEDIN_PASSWORD environment variable
+
+# Browser Configuration
+browser:
+  headless: false  # Run browser in headless mode
+  slow_motion_ms: 0  # Add delay between actions (ms)
+  timeout_seconds: 30  # Page load timeout
+  user_data_dir: "./data/browser"  # Browser profile directory
+  viewport_width: 1920
+  viewport_height: 1080
+  disable_images: false
+  proxy_url: ""  # HTTP proxy URL (optional)
+  chrome_path: ""  # Custom Chrome path (optional)
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0"
+
+# Stealth/Anti-Detection Settings
+stealth:
+  enable_mouse_simulation: true  # Use Bézier curves for mouse movement
+  enable_typing_simulation: true  # Realistic typing with typos
+  enable_scroll_simulation: true  # Natural scrolling behavior
+  enable_hover_events: true  # Random hover events
+  mouse_speed: 1.0  # Mouse movement speed multiplier
+  typing_speed_wpm: 60  # Typing speed (words per minute)
+  typo_frequency: 0.02  # Probability of typo (0-1)
+  scroll_variation: 0.3  # Scroll speed variation
+  enable_webdriver_masking: true  # Hide automation flags
+  randomize_fingerprint: true  # Randomize browser fingerprint
+  enable_canvas_noise: true  # Add noise to canvas fingerprinting
+  enable_webgl_noise: true  # Add noise to WebGL fingerprinting
+
+# Search Configuration
+search:
+  keywords: []  # Keywords to search for
+  job_titles:  # Job titles to target
+    - "Software Engineer"
+    - "Product Manager"
+  companies: []  # Specific companies to target
+  locations: []  # Locations to filter by
+  max_results: 100  # Maximum profiles to collect
+  max_pages: 10  # Maximum search pages to process
+  filter_by_2nd_degree: true  # Include 2nd degree connections
+  filter_by_3rd_degree: false  # Include 3rd+ degree connections
+
+# Connection Request Settings
+connection:
+  daily_limit: 20  # Maximum connections per day
+  hourly_limit: 5  # Maximum connections per hour
+  send_note: true  # Send personalized note with request
+  max_note_length: 300  # Maximum characters for note
+  skip_without_photo: false  # Skip profiles without photo
+  skip_open_to_work: false  # Skip "Open to Work" profiles
+  min_mutual_connections: 0  # Minimum mutual connections required
+  note_templates:
+    - "Hi {{.FirstName}}, I noticed we share an interest in {{.Industry}}. I'd love to connect and learn more about your work at {{.Company}}."
+    - "Hello {{.FirstName}}, I came across your profile and was impressed by your experience as {{.Title}}. Would love to connect!"
+    - "Hi {{.FirstName}}, I'm expanding my network in the {{.Industry}} space. Would be great to connect!"
+
+# Messaging Configuration
+messaging:
+  enable_follow_up: true  # Send follow-up messages
+  follow_up_delay_days: 3  # Days to wait before follow-up
+  max_message_length: 8000  # Maximum message length
+  daily_message_limit: 50  # Maximum messages per day
+  message_templates:
+    - "Hi {{.FirstName}}, thanks for connecting! I'd love to learn more about your role at {{.Company}}. How are you finding the current market?"
+    - "Hello {{.FirstName}}, great to connect! I noticed your background in {{.Title}}. Would love to hear about your experience."
+
+# Rate Limiting Settings
+rate_limits:
+  min_action_delay_ms: 2000  # Minimum delay between actions
+  max_action_delay_ms: 5000  # Maximum delay between actions
+  min_page_delay_ms: 3000  # Minimum delay between page loads
+  max_page_delay_ms: 8000  # Maximum delay between page loads
+  min_typing_delay_ms: 50  # Minimum delay between keystrokes
+  max_typing_delay_ms: 150  # Maximum delay between keystrokes
+  cooldown_after_batch_min: 15  # Cooldown after batch of actions
+  batch_size: 5  # Number of actions per batch
+
+# Activity Schedule
+schedule:
+  enabled: true  # Enable activity scheduling
+  start_hour: 9  # Start hour (24-hour format)
+  end_hour: 18  # End hour (24-hour format)
+  work_days_only: true  # Only operate on weekdays
+  timezone: "America/New_York"  # Timezone for scheduling
+  enable_breaks: true  # Take periodic breaks
+  min_break_minutes: 5  # Minimum break duration
+  max_break_minutes: 15  # Maximum break duration
+  break_frequency_minutes: 60  # How often to take breaks
+
+# Storage Settings
+storage:
+  type: "sqlite"  # Storage type: sqlite or json
+  database_path: "./data/linkedin.db"  # SQLite database path
+  cookies_path: "./data/cookies.json"  # Cookie storage path
+  profiles_path: "./data/profiles.json"  # Profile data path
+  backup_enabled: true  # Enable backups
+  backup_interval_hours: 24  # Backup frequency
+
+# Logging Configuration
+logging:
+  level: "info"  # Log level: debug, info, warn, error
+  format: "text"  # Output format: text, json
+  output: "both"  # Output destination: stdout, file, both
+  file_path: "./logs/linkedin.log"  # Log file path
+  max_size_mb: 100  # Maximum log file size
+  max_backups: 5  # Number of log backups to keep
