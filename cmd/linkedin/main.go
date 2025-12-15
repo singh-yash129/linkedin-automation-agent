@@ -274,14 +274,30 @@ func (app *App) runFullMode() {
 		// Search for profiles
 		app.log.Info("Starting search phase...", nil)
 		filters := search.SearchFilters{
-			Keywords:   app.config.Search.Keywords[0],
 			MaxResults: app.config.Search.MaxResults,
+		}
+
+		// Safely access arrays
+		if len(app.config.Search.Keywords) > 0 {
+			filters.Keywords = app.config.Search.Keywords[0]
 		}
 		if len(app.config.Search.Locations) > 0 {
 			filters.Location = app.config.Search.Locations[0]
 		}
 		if len(app.config.Search.Companies) > 0 {
 			filters.Company = app.config.Search.Companies[0]
+		}
+		if len(app.config.Search.JobTitles) > 0 {
+			filters.Title = app.config.Search.JobTitles[0]
+		}
+
+		// Check if we have any search criteria
+		if filters.Keywords == "" && filters.Location == "" && filters.Company == "" && filters.Title == "" {
+			app.log.Warn("No search criteria configured in config.yaml", map[string]interface{}{
+				"hint": "Add keywords, locations, companies, or job_titles to search section",
+			})
+			app.cleanup()
+			return
 		}
 
 		results, err := app.search.Search(filters)
@@ -350,6 +366,21 @@ func (app *App) runSearchMode() {
 	if len(app.config.Search.Locations) > 0 {
 		filters.Location = app.config.Search.Locations[0]
 	}
+	if len(app.config.Search.Companies) > 0 {
+		filters.Company = app.config.Search.Companies[0]
+	}
+	if len(app.config.Search.JobTitles) > 0 {
+		filters.Title = app.config.Search.JobTitles[0]
+	}
+
+	// Check if we have any search criteria
+	if filters.Keywords == "" && filters.Location == "" && filters.Company == "" && filters.Title == "" {
+		app.log.Warn("No search criteria configured", map[string]interface{}{
+			"hint": "Use --keywords flag or add to config.yaml",
+		})
+		app.cleanup()
+		return
+	}
 
 	results, err := app.search.Search(filters)
 	if err != nil {
@@ -409,6 +440,12 @@ func (app *App) runConnectMode() {
 		}
 		if len(app.config.Search.Locations) > 0 {
 			filters.Location = app.config.Search.Locations[0]
+		}
+		if len(app.config.Search.Companies) > 0 {
+			filters.Company = app.config.Search.Companies[0]
+		}
+		if len(app.config.Search.JobTitles) > 0 {
+			filters.Title = app.config.Search.JobTitles[0]
 		}
 
 		results, err := app.search.Search(filters)
