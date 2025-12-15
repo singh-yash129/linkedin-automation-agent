@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/singh-yash129/link/internal/browser"
 	"github.com/singh-yash129/link/internal/config"
 	"github.com/singh-yash129/link/internal/logger"
@@ -215,8 +216,9 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	// Wait a bit for results to fully render
 	time.Sleep(2 * time.Second)
 
-	// First approach: find all profile links on the page directly
 	page := sm.browser.GetPage()
+
+	// First approach: find all profile links on the page directly
 	allPageLinks, err := page.Elements("a[href*='/in/']")
 	if err == nil && len(allPageLinks) > 0 {
 		sm.log.Debug("Found profile links on page", map[string]interface{}{
@@ -273,23 +275,22 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 		}
 	}
 
-	// Fallback: Try container-based approach
-	sm.log.Debug("Trying container-based extraction", nil)
+	// LinkedIn hides actual profile URLs in search results for non-connections
+	// Extract available info (name, title, location) from result cards
+	sm.log.Debug("No /in/ links found - extracting from result cards (URLs hidden by LinkedIn)", nil)
 	
-	// Try multiple selectors for result cards (LinkedIn changes these)
+	// Try multiple selectors for result cards
 	selectors := []string{
 		"li.reusable-search__result-container",
-		".entity-result",
-		".reusable-search__result-container",
 		"div[data-chameleon-result-urn]",
-		".search-result__wrapper",
+		".entity-result",
 	}
 
 	var elements rod.Elements
 	for _, selector := range selectors {
 		elements, err = sm.browser.GetElements(selector)
 		if err == nil && len(elements) > 0 {
-			sm.log.Debug("Found results with selector", map[string]interface{}{
+			sm.log.Debug("Found result containers", map[string]interface{}{
 				"selector": selector,
 				"count":    len(elements),
 			})
@@ -298,82 +299,35 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 	}
 
 	if len(elements) == 0 {
-		sm.log.Debug("No results found with any selector", nil)
 		return nil, nil
 	}
 
-	for _, el := range elements {
+	for i, el := range elements {
 		result := &SearchResult{}
 
-		// First, try to get ALL links in this element and find one with /in/
-		allLinks, err := el.Elements("a")
-		if err == nil {
-			for _, link := range allLinks {
-				href, _ := link.Attribute("href")
-				if href != nil && strings.Contains(*href, "/in/") {
-					result.ProfileURL = sm.cleanProfileURL(*href)
-					sm.log.Debug("Found profile link", map[string]interface{}{
-						"url": result.ProfileURL,
-					})
-					break
-				}
-			}
-		}
-
-		// Skip if no valid profile URL
-		if result.ProfileURL == "" {
-			// Debug: log what we found in this element
-			html, _ := el.HTML()
-			if len(html) > 500 {
-				html = html[:500]
-			}
-			sm.log.Debug("No profile URL found in element", map[string]interface{}{
-				"html_preview": html,
-			})
-			continue
-		}
-
-		// Extract name - try multiple selectors
+		// Extract name - could be "LinkedIn Member" for hidden profiles
 		nameSelectors := []string{
-			"span[aria-hidden='true']",
-			".entity-result__title-text span[aria-hidden='true']",
-			".actor-name",
-			"span.entity-result__title-text",
-			".artdeco-entity-lockup__title span[aria-hidden='true']",
+			".entity-result__title-text a",
+			"span.OBDoCEaFoHfgOsoYmliCTluEBnJPTUHbZw a",
+			".t-16 a",
 		}
 		for _, sel := range nameSelectors {
 			nameEl, err := el.Element(sel)
 			if err == nil {
 				text, _ := nameEl.Text()
 				text = strings.TrimSpace(text)
-				if text != "" && !strings.HasPrefix(text, "View") && len(text) < 100 {
+				if text != "" && len(text) < 100 {
 					result.Name = text
 					break
 				}
 			}
 		}
 
-		// If no name found, try getting text from the profile link itself
-		if result.Name == "" {
-			for _, link := range allLinks {
-				href, _ := link.Attribute("href")
-				if href != nil && strings.Contains(*href, "/in/") {
-					text, _ := link.Text()
-					text = strings.TrimSpace(text)
-					if text != "" && len(text) < 100 {
-						result.Name = text
-						break
-					}
-				}
-			}
-		}
-
 		// Extract title/headline
 		titleSelectors := []string{
+			".kQbDCiVfkfjYkfnWKOnBYxRirRwWOBSJEw",
 			".entity-result__primary-subtitle",
-			".entity-result__summary",
-			".subline-level-1",
-			".artdeco-entity-lockup__subtitle",
+			".t-14.t-black.t-normal",
 		}
 		for _, sel := range titleSelectors {
 			titleEl, err := el.Element(sel)
@@ -388,9 +342,9 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 
 		// Extract location
 		locSelectors := []string{
+			".EQMTllrWLFonnbxJxKgwmCjjBTnZEHWLWQvbs",
 			".entity-result__secondary-subtitle",
-			".subline-level-2",
-			".artdeco-entity-lockup__caption",
+			".t-14.t-normal:not(.t-black)",
 		}
 		for _, sel := range locSelectors {
 			locEl, err := el.Element(sel)
@@ -403,24 +357,68 @@ func (sm *SearchManager) extractSearchResults() ([]*SearchResult, error) {
 			}
 		}
 
-		// Extract connection degree
-		degreeEl, err := el.Element(".entity-result__badge-text")
-		if err == nil {
-			degree, _ := degreeEl.Text()
-			result.ConnectionDeg = strings.TrimSpace(degree)
-			result.IsConnection = strings.Contains(degree, "1st")
+		// Skip if we got nothing useful
+		if result.Title == "" && result.Name == "" {
+			continue
 		}
 
-		if result.Name != "" {
-			results = append(results, result)
-			sm.log.Debug("Found profile", map[string]interface{}{
-				"name":  result.Name,
-				"title": result.Title,
-			})
+		// Generate a placeholder URL based on position (will need to click to get real URL)
+		result.ProfileURL = fmt.Sprintf("search-result-%d", i+1)
+		
+		// If name is hidden, use title as identifier
+		if result.Name == "" || result.Name == "LinkedIn Member" {
+			if result.Title != "" {
+				result.Name = result.Title
+			}
+		}
 
-			// Random hover for human-like behavior
-			if sm.stealth.IsWithinSchedule() {
-				sm.stealth.RandomHover(sm.browser.GetPage())
+		results = append(results, result)
+		sm.log.Debug("Extracted profile (URL hidden)", map[string]interface{}{
+			"name":     result.Name,
+			"title":    result.Title,
+			"location": result.Location,
+		})
+	}
+
+	// If we found results but no real URLs, try clicking on first result to get URL pattern
+	if len(results) > 0 && len(elements) > 0 {
+		sm.log.Info("Found profiles but URLs hidden by LinkedIn. Attempting to get real URLs by clicking...", nil)
+		
+		for i, el := range elements {
+			if i >= len(results) || i >= 5 { // Limit to first 5
+				break
+			}
+			
+			// Try to click on the profile link
+			clickableSelectors := []string{
+				"a.kDXdXfXwwrlRRhXXvDkIXwgwVetUaYykhk",
+				".entity-result__title-text a",
+				"a[data-test-app-aware-link]",
+			}
+			
+			for _, sel := range clickableSelectors {
+				linkEl, err := el.Element(sel)
+				if err == nil {
+					// Click and wait for navigation
+					err = linkEl.Click(proto.InputMouseButtonLeft, 1)
+					if err == nil {
+						time.Sleep(2 * time.Second)
+						
+						// Get current URL
+						currentURL, _ := sm.browser.GetCurrentURL()
+						if strings.Contains(currentURL, "/in/") {
+							results[i].ProfileURL = sm.cleanProfileURL(currentURL)
+							sm.log.Debug("Got real profile URL", map[string]interface{}{
+								"url": results[i].ProfileURL,
+							})
+						}
+						
+						// Go back to search
+						sm.browser.GetPage().NavigateBack()
+						time.Sleep(1 * time.Second)
+						break
+					}
+				}
 			}
 		}
 	}
