@@ -69,6 +69,7 @@ func (sm *SearchManager) Search(filters SearchFilters) ([]*SearchResult, error) 
 		"keywords":   filters.Keywords,
 		"location":   filters.Location,
 		"company":    filters.Company,
+		"title":      filters.Title,
 		"maxResults": filters.MaxResults,
 	})
 
@@ -79,6 +80,24 @@ func (sm *SearchManager) Search(filters SearchFilters) ([]*SearchResult, error) 
 	}
 
 	sm.stealth.PageDelay()
+
+	// Wait for search page to load
+	if err := sm.browser.WaitForElement(".search-results-container", 10*time.Second); err != nil {
+		sm.log.Warn("Search results container not found, waiting longer", nil)
+		time.Sleep(3 * time.Second)
+	}
+
+	// Apply filters using LinkedIn's filter UI (Location, Company, Title)
+	if filters.Location != "" || filters.Company != "" || filters.Title != "" {
+		sm.log.Info("Applying search filters via UI", nil)
+		if err := sm.applySearchFilters(filters); err != nil {
+			sm.log.Warn("Some filters may not have been applied", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+		// Wait for filtered results to load
+		time.Sleep(2 * time.Second)
+	}
 
 	var allResults []*SearchResult
 	page := 1
@@ -166,23 +185,9 @@ func (sm *SearchManager) buildSearchURL(filters SearchFilters) string {
 	baseURL := "https://www.linkedin.com/search/results/people/?"
 	params := url.Values{}
 
-	// Build keywords - combine all filter terms for broader search
-	var keywordParts []string
+	// Add keywords if provided
 	if filters.Keywords != "" {
-		keywordParts = append(keywordParts, filters.Keywords)
-	}
-	if filters.Title != "" {
-		keywordParts = append(keywordParts, filters.Title)
-	}
-	if filters.Company != "" {
-		keywordParts = append(keywordParts, filters.Company)
-	}
-	if filters.Location != "" {
-		keywordParts = append(keywordParts, filters.Location)
-	}
-
-	if len(keywordParts) > 0 {
-		params.Add("keywords", strings.Join(keywordParts, " "))
+		params.Add("keywords", filters.Keywords)
 	}
 
 	// Add network filter (connection level)
@@ -197,6 +202,152 @@ func (sm *SearchManager) buildSearchURL(filters SearchFilters) string {
 	params.Add("origin", "GLOBAL_SEARCH_HEADER")
 
 	return baseURL + params.Encode()
+}
+
+// applySearchFilters applies location, company, and title filters using LinkedIn's filter UI
+func (sm *SearchManager) applySearchFilters(filters SearchFilters) error {
+	page := sm.browser.GetPage()
+
+	// Apply Location filter
+	if filters.Location != "" {
+		sm.log.Info("Applying location filter", map[string]interface{}{"location": filters.Location})
+		if err := sm.applyFilter("Locations", filters.Location); err != nil {
+			sm.log.Warn("Could not apply location filter via UI, will use keyword", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	// Apply Company filter
+	if filters.Company != "" {
+		sm.log.Info("Applying company filter", map[string]interface{}{"company": filters.Company})
+		if err := sm.applyFilter("Current company", filters.Company); err != nil {
+			sm.log.Warn("Could not apply company filter via UI, will use keyword", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	// Apply Title filter
+	if filters.Title != "" {
+		sm.log.Info("Applying title filter", map[string]interface{}{"title": filters.Title})
+		if err := sm.applyFilter("Title", filters.Title); err != nil {
+			sm.log.Warn("Could not apply title filter via UI, will use keyword", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
+
+	// Wait for results to update
+	time.Sleep(2 * time.Second)
+	_ = page
+	return nil
+}
+
+// applyFilter clicks on a filter button and enters the value
+func (sm *SearchManager) applyFilter(filterName, value string) error {
+	page := sm.browser.GetPage()
+
+	// Click "All filters" button to open filter panel
+	allFiltersSelectors := []string{
+		"button[aria-label='Show all filters']",
+		"button:has-text('All filters')",
+		".search-reusables__all-filters-pill-button",
+	}
+
+	filterPanelOpened := false
+	for _, sel := range allFiltersSelectors {
+		if el, err := page.Element(sel); err == nil {
+			el.Click(proto.InputMouseButtonLeft, 1)
+			time.Sleep(1 * time.Second)
+			filterPanelOpened = true
+			break
+		}
+	}
+
+	if !filterPanelOpened {
+		// Try clicking on specific filter button directly
+		filterBtnSelectors := []string{
+			fmt.Sprintf("button[aria-label*='%s']", filterName),
+			fmt.Sprintf("button:has-text('%s')", filterName),
+		}
+		for _, sel := range filterBtnSelectors {
+			if el, err := page.Element(sel); err == nil {
+				el.Click(proto.InputMouseButtonLeft, 1)
+				time.Sleep(1 * time.Second)
+				filterPanelOpened = true
+				break
+			}
+		}
+	}
+
+	if !filterPanelOpened {
+		return fmt.Errorf("could not open filter panel")
+	}
+
+	// Find the filter section and input
+	// Look for input field in the filter section
+	inputSelectors := []string{
+		fmt.Sprintf("input[placeholder*='%s']", filterName),
+		fmt.Sprintf("input[aria-label*='%s']", filterName),
+		"input[placeholder='Add a location']",
+		"input[placeholder='Add a company']",
+		"input[placeholder='Add a title']",
+	}
+
+	var inputEl *rod.Element
+	for _, sel := range inputSelectors {
+		if el, err := page.Element(sel); err == nil {
+			inputEl = el
+			break
+		}
+	}
+
+	if inputEl == nil {
+		// Close filter panel
+		if closeBtn, err := page.Element("button[aria-label='Dismiss']"); err == nil {
+			closeBtn.Click(proto.InputMouseButtonLeft, 1)
+		}
+		return fmt.Errorf("filter input not found for %s", filterName)
+	}
+
+	// Type the value
+	inputEl.Click(proto.InputMouseButtonLeft, 1)
+	time.Sleep(500 * time.Millisecond)
+	inputEl.Input(value)
+	time.Sleep(1 * time.Second)
+
+	// Select first suggestion from dropdown
+	suggestionSelectors := []string{
+		".basic-typeahead__selectable:first-child",
+		".search-typeahead-v2__hit:first-child",
+		"[role='option']:first-child",
+	}
+
+	for _, sel := range suggestionSelectors {
+		if suggEl, err := page.Element(sel); err == nil {
+			suggEl.Click(proto.InputMouseButtonLeft, 1)
+			time.Sleep(500 * time.Millisecond)
+			break
+		}
+	}
+
+	// Click "Show results" button
+	showResultsSelectors := []string{
+		"button[aria-label='Apply current filters to show results']",
+		"button:has-text('Show results')",
+		".search-reusables__secondary-filters-show-results-button",
+	}
+
+	for _, sel := range showResultsSelectors {
+		if btn, err := page.Element(sel); err == nil {
+			btn.Click(proto.InputMouseButtonLeft, 1)
+			time.Sleep(2 * time.Second)
+			break
+		}
+	}
+
+	return nil
 }
 
 // connectionLevelToNetwork converts connection level to LinkedIn network parameter.
