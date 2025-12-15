@@ -103,12 +103,12 @@ func (cm *ConnectionManager) SendConnectionRequest(profile *search.SearchResult,
 
 // clickConnectButton finds and clicks the Connect button.
 func (cm *ConnectionManager) clickConnectButton() error {
+	// First, try direct Connect button on profile (sometimes visible)
 	connectSelectors := []string{
-		"button[aria-label*='Invite'][aria-label*='connect']",
+		"button[aria-label*='connect' i]",
 		"button[aria-label*='Connect']",
+		"button:has-text('Connect'):not([disabled])",
 		".pvs-profile-actions button:has-text('Connect')",
-		"button.artdeco-button--primary:has-text('Connect')",
-		"[data-control-name='connect']",
 	}
 
 	for _, selector := range connectSelectors {
@@ -121,13 +121,37 @@ func (cm *ConnectionManager) clickConnectButton() error {
 		}
 	}
 
-	// Try more button dropdown
-	if cm.browser.HasElement("button[aria-label='More actions']") {
-		cm.browser.Click("button[aria-label='More actions']")
-		cm.stealth.RandomDelay()
+	// Connect is usually in "More" dropdown on LinkedIn
+	moreButtonSelectors := []string{
+		"button[aria-label='More actions']",
+		"button.artdeco-dropdown__trigger:has-text('More')",
+		"button[id*='profile-overflow-action']",
+	}
 
-		if cm.browser.HasElement("[data-control-name='connect']") {
-			return cm.browser.Click("[data-control-name='connect']")
+	for _, moreSelector := range moreButtonSelectors {
+		if cm.browser.HasElement(moreSelector) {
+			cm.stealth.HoverElement(cm.browser.GetPage(), moreSelector)
+			cm.stealth.ThinkDelay()
+			cm.browser.Click(moreSelector)
+			cm.stealth.RandomDelay()
+
+			// Now click "Invite to connect" in dropdown
+			connectDropdownSelectors := []string{
+				"div[aria-label*='to connect'][role='button']",
+				"div[aria-label*='Invite'][aria-label*='connect'][role='button']",
+				".artdeco-dropdown__item:has-text('Connect')",
+				"div.artdeco-dropdown__item[role='button']:has-text('Connect')",
+			}
+
+			for _, dropdownSelector := range connectDropdownSelectors {
+				if cm.browser.HasElement(dropdownSelector) {
+					cm.stealth.ThinkDelay()
+					if err := cm.browser.Click(dropdownSelector); err == nil {
+						return nil
+					}
+				}
+			}
+			break
 		}
 	}
 
@@ -142,8 +166,9 @@ func (cm *ConnectionManager) addConnectionNote(note string, profile *search.Sear
 	// Click "Add a note" button if present
 	addNoteSelectors := []string{
 		"button[aria-label='Add a note']",
-		"button:has-text('Add a note')",
-		".artdeco-modal button:has-text('Add a note')",
+		".artdeco-modal__actionbar button:has-text('Add a note')",
+		".send-invite button.artdeco-button--secondary:has-text('Add a note')",
+		"div[role='dialog'] button:has-text('Add a note')",
 	}
 
 	for _, selector := range addNoteSelectors {
@@ -161,10 +186,12 @@ func (cm *ConnectionManager) addConnectionNote(note string, profile *search.Sear
 
 	// Find textarea and type note
 	noteSelectors := []string{
-		"textarea[name='message']",
 		"textarea#custom-message",
+		"textarea.connect-button-send-invite__custom-message",
+		"textarea[name='message']",
+		".send-invite textarea",
 		".artdeco-modal textarea",
-		"textarea[placeholder*='Add a note']",
+		"div[role='dialog'] textarea",
 	}
 
 	for _, selector := range noteSelectors {
@@ -207,11 +234,15 @@ func (cm *ConnectionManager) getFirstName(fullName string) string {
 
 // clickSendButton clicks the send/submit button.
 func (cm *ConnectionManager) clickSendButton() error {
+	// LinkedIn shows either "Send" (after adding note) or "Send without a note"
 	sendSelectors := []string{
-		"button[aria-label='Send now']",
 		"button[aria-label='Send invitation']",
-		"button:has-text('Send')",
-		".artdeco-modal button.artdeco-button--primary",
+		"button[aria-label='Send without a note']",
+		"button[aria-label='Send now']",
+		".artdeco-modal__actionbar button.artdeco-button--primary",
+		".send-invite button.artdeco-button--primary",
+		"div[role='dialog'] button.artdeco-button--primary",
+		"button.artdeco-button--primary:has-text('Send')",
 	}
 
 	cm.stealth.ThinkDelay()

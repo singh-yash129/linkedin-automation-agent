@@ -103,9 +103,12 @@ func (mm *MessagingManager) SendMessage(profile *search.SearchResult, message st
 // clickMessageButton finds and clicks the Message button.
 func (mm *MessagingManager) clickMessageButton() error {
 	messageSelectors := []string{
+		// Primary Message button - aria-label is "Message {Name}"
+		"button[aria-label^='Message ']",
 		"button[aria-label*='Message']",
-		"button:has-text('Message')",
+		"button.artdeco-button--secondary:has-text('Message')",
 		".pvs-profile-actions button:has-text('Message')",
+		"button:has-text('Message'):not([disabled])",
 		"[data-control-name='message']",
 	}
 
@@ -126,9 +129,13 @@ func (mm *MessagingManager) clickMessageButton() error {
 func (mm *MessagingManager) typeMessage(message string) error {
 	// Find message input
 	inputSelectors := []string{
+		// Exact LinkedIn message input selector
+		"div.msg-form__contenteditable[contenteditable='true'][role='textbox']",
+		"div.msg-form__contenteditable[contenteditable='true']",
 		".msg-form__contenteditable",
-		"div[role='textbox'][contenteditable='true']",
-		".msg-form__msg-content-container--scrollable div[contenteditable='true']",
+		".msg-form__message-texteditor div[contenteditable='true']",
+		"div[role='textbox'][contenteditable='true'][aria-label*='Write a message']",
+		"form.msg-form div[contenteditable='true']",
 	}
 
 	for _, selector := range inputSelectors {
@@ -148,10 +155,12 @@ func (mm *MessagingManager) typeMessage(message string) error {
 // clickSendButton clicks the send button.
 func (mm *MessagingManager) clickSendButton() error {
 	sendSelectors := []string{
+		// Exact LinkedIn send button selector
+		"button.msg-form__send-button[type='submit']",
 		"button.msg-form__send-button",
-		"button[type='submit'].msg-form__send-button",
-		"button[aria-label='Send']",
-		".msg-form__send-button",
+		".msg-form__right-actions button.msg-form__send-button",
+		"form.msg-form button[type='submit']",
+		"button[type='submit']:has-text('Send')",
 	}
 
 	mm.stealth.ThinkDelay()
