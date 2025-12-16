@@ -102,17 +102,40 @@ func (mm *MessagingManager) SendMessage(profile *search.SearchResult, message st
 
 // clickMessageButton finds and clicks the Message button.
 func (mm *MessagingManager) clickMessageButton() error {
-	messageSelectors := []string{
-		// Primary Message button - aria-label is "Message {Name}"
+	// Wait for page to fully load
+	time.Sleep(2 * time.Second)
+
+	// Try aria-label selectors first (most reliable)
+	ariaSelectors := []string{
 		"button[aria-label^='Message ']",
 		"button[aria-label*='Message']",
-		"button.artdeco-button--secondary:has-text('Message')",
-		".pvs-profile-actions button:has-text('Message')",
-		"button:has-text('Message'):not([disabled])",
+	}
+
+	for _, selector := range ariaSelectors {
+		if mm.browser.HasElement(selector) {
+			mm.stealth.HoverElement(mm.browser.GetPage(), selector)
+			mm.stealth.ThinkDelay()
+			if err := mm.browser.Click(selector); err == nil {
+				return nil
+			}
+		}
+	}
+
+	// Fallback: find button by text content
+	if mm.browser.HasElementWithText("button", "Message") {
+		mm.stealth.ThinkDelay()
+		if err := mm.browser.ClickElementWithText("button", "Message"); err == nil {
+			return nil
+		}
+	}
+
+	// Last resort: try generic selectors
+	fallbackSelectors := []string{
+		".pvs-profile-actions button.artdeco-button--secondary",
 		"[data-control-name='message']",
 	}
 
-	for _, selector := range messageSelectors {
+	for _, selector := range fallbackSelectors {
 		if mm.browser.HasElement(selector) {
 			mm.stealth.HoverElement(mm.browser.GetPage(), selector)
 			mm.stealth.ThinkDelay()

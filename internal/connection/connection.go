@@ -103,12 +103,12 @@ func (cm *ConnectionManager) SendConnectionRequest(profile *search.SearchResult,
 
 // clickConnectButton finds and clicks the Connect button.
 func (cm *ConnectionManager) clickConnectButton() error {
+	// Wait for page to load
+	time.Sleep(2 * time.Second)
+
 	// First, try direct Connect button on profile (sometimes visible)
 	connectSelectors := []string{
-		"button[aria-label*='connect' i]",
 		"button[aria-label*='Connect']",
-		"button:has-text('Connect'):not([disabled])",
-		".pvs-profile-actions button:has-text('Connect')",
 	}
 
 	for _, selector := range connectSelectors {
@@ -121,10 +121,17 @@ func (cm *ConnectionManager) clickConnectButton() error {
 		}
 	}
 
+	// Try finding Connect button by text
+	if cm.browser.HasElementWithText("button", "Connect") {
+		cm.stealth.ThinkDelay()
+		if err := cm.browser.ClickElementWithText("button", "Connect"); err == nil {
+			return nil
+		}
+	}
+
 	// Connect is usually in "More" dropdown on LinkedIn
 	moreButtonSelectors := []string{
 		"button[aria-label='More actions']",
-		"button.artdeco-dropdown__trigger:has-text('More')",
 		"button[id*='profile-overflow-action']",
 	}
 
@@ -133,14 +140,12 @@ func (cm *ConnectionManager) clickConnectButton() error {
 			cm.stealth.HoverElement(cm.browser.GetPage(), moreSelector)
 			cm.stealth.ThinkDelay()
 			cm.browser.Click(moreSelector)
-			cm.stealth.RandomDelay()
+			time.Sleep(1 * time.Second) // Wait for dropdown to open
 
 			// Now click "Invite to connect" in dropdown
 			connectDropdownSelectors := []string{
 				"div[aria-label*='to connect'][role='button']",
 				"div[aria-label*='Invite'][aria-label*='connect'][role='button']",
-				".artdeco-dropdown__item:has-text('Connect')",
-				"div.artdeco-dropdown__item[role='button']:has-text('Connect')",
 			}
 
 			for _, dropdownSelector := range connectDropdownSelectors {
@@ -149,6 +154,14 @@ func (cm *ConnectionManager) clickConnectButton() error {
 					if err := cm.browser.Click(dropdownSelector); err == nil {
 						return nil
 					}
+				}
+			}
+
+			// Fallback: find by text in dropdown
+			if cm.browser.HasElementWithText("div.artdeco-dropdown__item", "Connect") {
+				cm.stealth.ThinkDelay()
+				if err := cm.browser.ClickElementWithText("div.artdeco-dropdown__item", "Connect"); err == nil {
+					return nil
 				}
 			}
 			break
@@ -161,14 +174,11 @@ func (cm *ConnectionManager) clickConnectButton() error {
 // addConnectionNote adds a personalized note to the connection request.
 func (cm *ConnectionManager) addConnectionNote(note string, profile *search.SearchResult) error {
 	// Wait for modal
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	// Click "Add a note" button if present
 	addNoteSelectors := []string{
 		"button[aria-label='Add a note']",
-		".artdeco-modal__actionbar button:has-text('Add a note')",
-		".send-invite button.artdeco-button--secondary:has-text('Add a note')",
-		"div[role='dialog'] button:has-text('Add a note')",
 	}
 
 	for _, selector := range addNoteSelectors {
@@ -179,7 +189,12 @@ func (cm *ConnectionManager) addConnectionNote(note string, profile *search.Sear
 		}
 	}
 
-	cm.stealth.RandomDelay()
+	// Fallback: find by text
+	if cm.browser.HasElementWithText("button", "Add a note") {
+		cm.browser.ClickElementWithText("button", "Add a note")
+	}
+
+	time.Sleep(1 * time.Second)
 
 	// Personalize the note
 	personalizedNote := cm.personalizeNote(note, profile)

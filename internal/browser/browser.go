@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -201,6 +202,36 @@ func (bm *BrowserManager) Click(selector string) error {
 func (bm *BrowserManager) HasElement(selector string) bool {
 	_, err := bm.page.Timeout(2 * time.Second).Element(selector)
 	return err == nil
+}
+
+// HasElementWithText checks if an element with specific text exists.
+func (bm *BrowserManager) HasElementWithText(selector, text string) bool {
+	els, err := bm.page.Timeout(2 * time.Second).Elements(selector)
+	if err != nil {
+		return false
+	}
+	for _, el := range els {
+		t, err := el.Text()
+		if err == nil && strings.Contains(t, text) {
+			return true
+		}
+	}
+	return false
+}
+
+// ClickElementWithText clicks on an element matching selector that contains specific text.
+func (bm *BrowserManager) ClickElementWithText(selector, text string) error {
+	els, err := bm.page.Timeout(3 * time.Second).Elements(selector)
+	if err != nil {
+		return fmt.Errorf("elements not found: %s", selector)
+	}
+	for _, el := range els {
+		t, err := el.Text()
+		if err == nil && strings.Contains(t, text) {
+			return el.Click(proto.InputMouseButtonLeft, 1)
+		}
+	}
+	return fmt.Errorf("element with text '%s' not found", text)
 }
 
 // WaitForElement waits for an element to appear.
