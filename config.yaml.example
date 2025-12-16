@@ -87,11 +87,11 @@ rate_limits:
 
 # Activity Schedule
 schedule:
-  enabled: true  # Enable activity scheduling
-  start_hour: 9  # Start hour (24-hour format)
-  end_hour: 18  # End hour (24-hour format)
-  work_days_only: true  # Only operate on weekdays
-  timezone: "America/New_York"  # Timezone for scheduling
+  enabled: false  # Enable activity scheduling (set true for production)
+  start_hour: 0  # Start hour (24-hour format)
+  end_hour: 23  # End hour (24-hour format)
+  work_days_only: false  # Only operate on weekdays
+  timezone: "Asia/Kolkata"  # Timezone for scheduling
   enable_breaks: true  # Take periodic breaks
   min_break_minutes: 5  # Minimum break duration
   max_break_minutes: 15  # Maximum break duration
