@@ -75,16 +75,19 @@ func (cm *ConnectionManager) SendConnectionRequest(profile *search.SearchResult,
 	cm.stealth.RandomDelay()
 
 	// Handle connection modal
+	noteAdded := false
 	if note != "" {
 		if err := cm.addConnectionNote(note, profile); err != nil {
-			cm.log.Warn("Failed to add note, sending without", map[string]interface{}{
+			cm.log.Warn("Failed to add note, will send without", map[string]interface{}{
 				"error": err.Error(),
 			})
+		} else {
+			noteAdded = true
 		}
 	}
 
-	// Click send
-	if err := cm.clickSendButton(); err != nil {
+	// Click send - different button depending on whether note was added
+	if err := cm.clickSendButton(noteAdded); err != nil {
 		return err
 	}
 
@@ -173,28 +176,41 @@ func (cm *ConnectionManager) clickConnectButton() error {
 
 // addConnectionNote adds a personalized note to the connection request.
 func (cm *ConnectionManager) addConnectionNote(note string, profile *search.SearchResult) error {
-	// Wait for modal
-	time.Sleep(2 * time.Second)
+	// Wait for modal to appear
+	fmt.Println("[DEBUG] Waiting for connection modal...")
+	time.Sleep(3 * time.Second)
+
+	// Take screenshot of modal
+	cm.browser.Screenshot("./logs/debug_connection_modal.png")
+	fmt.Println("[DEBUG] Screenshot saved to ./logs/debug_connection_modal.png")
 
 	// Click "Add a note" button if present
-	addNoteSelectors := []string{
-		"button[aria-label='Add a note']",
-	}
+	fmt.Println("[DEBUG] Looking for 'Add a note' button...")
 
-	for _, selector := range addNoteSelectors {
-		if cm.browser.HasElement(selector) {
-			if err := cm.browser.Click(selector); err == nil {
-				break
-			}
+	addNoteFound := false
+	if cm.browser.HasElement("button[aria-label='Add a note']") {
+		fmt.Println("[DEBUG] Found 'Add a note' button by aria-label")
+		if err := cm.browser.Click("button[aria-label='Add a note']"); err == nil {
+			addNoteFound = true
+			fmt.Println("[DEBUG] Clicked 'Add a note' button")
 		}
 	}
 
-	// Fallback: find by text
-	if cm.browser.HasElementWithText("button", "Add a note") {
-		cm.browser.ClickElementWithText("button", "Add a note")
+	if !addNoteFound && cm.browser.HasElementWithText("button", "Add a note") {
+		fmt.Println("[DEBUG] Found 'Add a note' button by text")
+		if err := cm.browser.ClickElementWithText("button", "Add a note"); err == nil {
+			addNoteFound = true
+			fmt.Println("[DEBUG] Clicked 'Add a note' button by text")
+		}
 	}
 
-	time.Sleep(1 * time.Second)
+	if !addNoteFound {
+		fmt.Println("[DEBUG] 'Add a note' button NOT found - modal might show textarea directly")
+	}
+
+	// Wait for textarea to appear
+	fmt.Println("[DEBUG] Waiting for textarea...")
+	time.Sleep(2 * time.Second)
 
 	// Personalize the note
 	personalizedNote := cm.personalizeNote(note, profile)
@@ -210,12 +226,36 @@ func (cm *ConnectionManager) addConnectionNote(note string, profile *search.Sear
 	}
 
 	for _, selector := range noteSelectors {
+		fmt.Printf("[DEBUG] Trying textarea selector: %s\n", selector)
 		if cm.browser.HasElement(selector) {
-			// Use human-like typing
-			return cm.stealth.HumanType(cm.browser.GetPage(), personalizedNote)
+			fmt.Printf("[DEBUG] Found textarea: %s\n", selector)
+
+			// Get the element and use Input directly
+			el, err := cm.browser.GetElement(selector)
+			if err != nil {
+				fmt.Printf("[DEBUG] Failed to get element: %v\n", err)
+				continue
+			}
+
+			// Clear any existing text and input new text
+			if err := el.SelectAllText(); err != nil {
+				fmt.Printf("[DEBUG] SelectAllText failed: %v\n", err)
+			}
+
+			// Input the personalized note directly into the textarea
+			if err := el.Input(personalizedNote); err != nil {
+				fmt.Printf("[DEBUG] Input failed: %v\n", err)
+				return err
+			}
+
+			fmt.Println("[DEBUG] Note typed successfully")
+			// Wait for button to enable
+			time.Sleep(1 * time.Second)
+			return nil
 		}
 	}
 
+	fmt.Println("[DEBUG] No textarea found with any selector")
 	return fmt.Errorf("note textarea not found")
 }
 
@@ -248,26 +288,56 @@ func (cm *ConnectionManager) getFirstName(fullName string) string {
 }
 
 // clickSendButton clicks the send/submit button.
-func (cm *ConnectionManager) clickSendButton() error {
-	// LinkedIn shows either "Send" (after adding note) or "Send without a note"
+func (cm *ConnectionManager) clickSendButton(noteAdded bool) error {
+	fmt.Println("[DEBUG] Looking for Send button...")
+	fmt.Printf("[DEBUG] Note was added: %v\n", noteAdded)
+
+	// Take screenshot before attempting send
+	cm.browser.Screenshot("./logs/debug_before_send.png")
+	fmt.Println("[DEBUG] Screenshot saved to ./logs/debug_before_send.png")
+
+	cm.stealth.ThinkDelay()
+
+	// If note was NOT added, we should click "Send without a note" on the first modal
+	if !noteAdded {
+		fmt.Println("[DEBUG] Looking for 'Send without a note' button...")
+		if cm.browser.HasElement("button[aria-label='Send without a note']") {
+			fmt.Println("[DEBUG] Found 'Send without a note' button")
+			return cm.browser.Click("button[aria-label='Send without a note']")
+		}
+		// Fallback: primary button in modal
+		if cm.browser.HasElement(".artdeco-modal__actionbar button.artdeco-button--primary") {
+			fmt.Println("[DEBUG] Found primary button in actionbar")
+			return cm.browser.Click(".artdeco-modal__actionbar button.artdeco-button--primary")
+		}
+	}
+
+	// If note was added, look for "Send" or "Send invitation" button
 	sendSelectors := []string{
 		"button[aria-label='Send invitation']",
-		"button[aria-label='Send without a note']",
+		"button[aria-label='Send']",
 		"button[aria-label='Send now']",
 		".artdeco-modal__actionbar button.artdeco-button--primary",
 		".send-invite button.artdeco-button--primary",
 		"div[role='dialog'] button.artdeco-button--primary",
-		"button.artdeco-button--primary:has-text('Send')",
 	}
 
-	cm.stealth.ThinkDelay()
-
 	for _, selector := range sendSelectors {
+		fmt.Printf("[DEBUG] Trying send selector: %s\n", selector)
 		if cm.browser.HasElement(selector) {
+			fmt.Printf("[DEBUG] Found send button: %s\n", selector)
 			return cm.browser.Click(selector)
 		}
 	}
 
+	// Try by text
+	fmt.Println("[DEBUG] Trying to find Send button by text...")
+	if cm.browser.HasElementWithText("button", "Send") {
+		fmt.Println("[DEBUG] Found button with 'Send' text")
+		return cm.browser.ClickElementWithText("button", "Send")
+	}
+
+	fmt.Println("[DEBUG] Send button NOT found")
 	return fmt.Errorf("send button not found")
 }
 
