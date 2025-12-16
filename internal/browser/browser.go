@@ -200,13 +200,13 @@ func (bm *BrowserManager) Click(selector string) error {
 
 // HasElement checks if an element exists on the page.
 func (bm *BrowserManager) HasElement(selector string) bool {
-	_, err := bm.page.Timeout(2 * time.Second).Element(selector)
+	_, err := bm.page.Timeout(5 * time.Second).Element(selector)
 	return err == nil
 }
 
 // HasElementWithText checks if an element with specific text exists.
 func (bm *BrowserManager) HasElementWithText(selector, text string) bool {
-	els, err := bm.page.Timeout(2 * time.Second).Elements(selector)
+	els, err := bm.page.Timeout(5 * time.Second).Elements(selector)
 	if err != nil {
 		return false
 	}
@@ -221,7 +221,7 @@ func (bm *BrowserManager) HasElementWithText(selector, text string) bool {
 
 // ClickElementWithText clicks on an element matching selector that contains specific text.
 func (bm *BrowserManager) ClickElementWithText(selector, text string) error {
-	els, err := bm.page.Timeout(3 * time.Second).Elements(selector)
+	els, err := bm.page.Timeout(5 * time.Second).Elements(selector)
 	if err != nil {
 		return fmt.Errorf("elements not found: %s", selector)
 	}
@@ -232,6 +232,15 @@ func (bm *BrowserManager) ClickElementWithText(selector, text string) error {
 		}
 	}
 	return fmt.Errorf("element with text '%s' not found", text)
+}
+
+// GetPageHTML returns the current page HTML for debugging.
+func (bm *BrowserManager) GetPageHTML() string {
+	html, err := bm.page.HTML()
+	if err != nil {
+		return ""
+	}
+	return html
 }
 
 // WaitForElement waits for an element to appear.
@@ -416,9 +425,4 @@ func (bm *BrowserManager) GetAttribute(selector, attr string) (string, error) {
 		return "", nil
 	}
 	return *val, nil
-}
-
-// GetPageHTML returns the full page HTML.
-func (bm *BrowserManager) GetPageHTML() (string, error) {
-	return bm.page.HTML()
 }

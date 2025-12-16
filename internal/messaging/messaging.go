@@ -61,7 +61,13 @@ func (mm *MessagingManager) SendMessage(profile *search.SearchResult, message st
 		return fmt.Errorf("failed to navigate to profile: %w", err)
 	}
 
-	mm.stealth.PageDelay()
+	// Wait for page to fully load
+	fmt.Println("[DEBUG] Navigated to profile, waiting for page load...")
+	time.Sleep(5 * time.Second)
+
+	// Take a debug screenshot
+	mm.browser.Screenshot("./logs/debug_before_message.png")
+	fmt.Println("[DEBUG] Screenshot saved to ./logs/debug_before_message.png")
 
 	// Click Message button
 	if err := mm.clickMessageButton(); err != nil {
@@ -170,6 +176,26 @@ func (mm *MessagingManager) clickMessageButton() error {
 				return nil
 			}
 		}
+	}
+
+	// Debug: Check current URL
+	currentURL, _ := mm.browser.GetCurrentURL()
+	fmt.Printf("[DEBUG] Current URL: %s\n", currentURL)
+
+	// Debug: Check if we're on a LinkedIn page
+	pageHTML := mm.browser.GetPageHTML()
+	if strings.Contains(pageHTML, "Message") {
+		fmt.Println("[DEBUG] Page HTML contains 'Message' text")
+	} else {
+		fmt.Println("[DEBUG] Page HTML does NOT contain 'Message' text")
+	}
+
+	// Check for common LinkedIn elements
+	if mm.browser.HasElement("button") {
+		fmt.Println("[DEBUG] Page has buttons")
+	}
+	if mm.browser.HasElement(".artdeco-button") {
+		fmt.Println("[DEBUG] Page has artdeco buttons")
 	}
 
 	return fmt.Errorf("message button not found - may not be connected")
