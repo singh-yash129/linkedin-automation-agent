@@ -103,7 +103,9 @@ func (mm *MessagingManager) SendMessage(profile *search.SearchResult, message st
 // clickMessageButton finds and clicks the Message button.
 func (mm *MessagingManager) clickMessageButton() error {
 	// Wait for page to fully load
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
+
+	mm.log.Debug("Looking for Message button", nil)
 
 	// Try aria-label selectors first (most reliable)
 	ariaSelectors := []string{
@@ -112,30 +114,47 @@ func (mm *MessagingManager) clickMessageButton() error {
 	}
 
 	for _, selector := range ariaSelectors {
+		mm.log.Debug("Trying selector", map[string]interface{}{"selector": selector})
 		if mm.browser.HasElement(selector) {
+			mm.log.Debug("Found element, clicking", map[string]interface{}{"selector": selector})
 			mm.stealth.HoverElement(mm.browser.GetPage(), selector)
 			mm.stealth.ThinkDelay()
 			if err := mm.browser.Click(selector); err == nil {
 				return nil
 			}
+			mm.log.Debug("Click failed", map[string]interface{}{"selector": selector})
 		}
 	}
 
 	// Fallback: find button by text content
+	mm.log.Debug("Trying text-based search for 'Message' button", nil)
 	if mm.browser.HasElementWithText("button", "Message") {
+		mm.log.Debug("Found button with text 'Message'", nil)
 		mm.stealth.ThinkDelay()
 		if err := mm.browser.ClickElementWithText("button", "Message"); err == nil {
 			return nil
 		}
 	}
 
+	// Try primary button class (visible in the HTML)
+	primarySelector := "button.artdeco-button--primary"
+	mm.log.Debug("Trying primary button selector", map[string]interface{}{"selector": primarySelector})
+	if mm.browser.HasElementWithText(primarySelector, "Message") {
+		mm.stealth.ThinkDelay()
+		if err := mm.browser.ClickElementWithText(primarySelector, "Message"); err == nil {
+			return nil
+		}
+	}
+
 	// Last resort: try generic selectors
 	fallbackSelectors := []string{
-		".pvs-profile-actions button.artdeco-button--secondary",
+		".entry-point button",
+		".pvs-profile-actions button.artdeco-button--primary",
 		"[data-control-name='message']",
 	}
 
 	for _, selector := range fallbackSelectors {
+		mm.log.Debug("Trying fallback selector", map[string]interface{}{"selector": selector})
 		if mm.browser.HasElement(selector) {
 			mm.stealth.HoverElement(mm.browser.GetPage(), selector)
 			mm.stealth.ThinkDelay()
