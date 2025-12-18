@@ -73,7 +73,7 @@ link/
 
 ```bash
 # Clone the repository
-git clone https://github.com/singh-yash129/link.git
+git clone https://github.com/singh-yash129/linkedin-automation-agent.git
 cd link
 
 # Install dependencies
