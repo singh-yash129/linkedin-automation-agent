@@ -9,11 +9,11 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
-	"github.com/singh-yash129/link/internal/browser"
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
-	"github.com/singh-yash129/link/internal/stealth"
-	"github.com/singh-yash129/link/internal/storage"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/browser"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/stealth"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/storage"
 )
 
 // SearchResult represents a single search result.
@@ -56,6 +56,7 @@ type SearchFilters struct {
 	Industry        string
 	ConnectionLevel string // 1st, 2nd, 3rd
 	MaxResults      int
+	SkipDuplicates  bool // Skip profiles already in storage
 }
 
 // Search performs a LinkedIn people search with the given filters.
@@ -72,6 +73,9 @@ func (sm *SearchManager) Search(filters SearchFilters) ([]*SearchResult, error) 
 		"title":      filters.Title,
 		"maxResults": filters.MaxResults,
 	})
+
+	// Track seen URLs to avoid duplicates within search
+	seenURLs := make(map[string]bool)
 
 	// Navigate to search
 	if err := sm.browser.Navigate(searchURL); err != nil {
@@ -144,7 +148,35 @@ func (sm *SearchManager) Search(filters SearchFilters) ([]*SearchResult, error) 
 			break
 		}
 
-		allResults = append(allResults, results...)
+		// Filter duplicates from this page
+		for _, r := range results {
+			// Skip if URL already seen in this search
+			if seenURLs[r.ProfileURL] {
+				sm.log.Debug("Skipping duplicate profile", map[string]interface{}{
+					"url": r.ProfileURL,
+				})
+				continue
+			}
+			seenURLs[r.ProfileURL] = true
+
+			// Skip if already in storage (if enabled)
+			if filters.SkipDuplicates && sm.storage.ProfileExists(r.ProfileURL) {
+				sm.log.Debug("Skipping existing profile", map[string]interface{}{
+					"url": r.ProfileURL,
+				})
+				continue
+			}
+
+			// Skip if connection already sent
+			if filters.SkipDuplicates && sm.storage.WasConnectionSent(r.ProfileURL) {
+				sm.log.Debug("Skipping - connection already sent", map[string]interface{}{
+					"url": r.ProfileURL,
+				})
+				continue
+			}
+
+			allResults = append(allResults, r)
+		}
 
 		// Check if we have enough results
 		if len(allResults) >= maxResults {

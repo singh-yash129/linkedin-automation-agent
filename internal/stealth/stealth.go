@@ -17,8 +17,8 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/proto"
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
 )
 
 // StealthManager handles all anti-detection and human simulation operations.

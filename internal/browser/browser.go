@@ -13,8 +13,8 @@ import (
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/go-rod/stealth"
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
 )
 
 // BrowserManager handles browser lifecycle and operations.
@@ -425,4 +425,39 @@ func (bm *BrowserManager) GetAttribute(selector, attr string) (string, error) {
 		return "", nil
 	}
 	return *val, nil
+}
+
+// SetCookie sets a single cookie from a map (e.g., from JSON import).
+func (bm *BrowserManager) SetCookie(cookie map[string]interface{}) error {
+	param := &proto.NetworkCookieParam{}
+
+	if name, ok := cookie["name"].(string); ok {
+		param.Name = name
+	}
+	if value, ok := cookie["value"].(string); ok {
+		param.Value = value
+	}
+	if domain, ok := cookie["domain"].(string); ok {
+		param.Domain = domain
+	}
+	if path, ok := cookie["path"].(string); ok {
+		param.Path = path
+	}
+	if secure, ok := cookie["secure"].(bool); ok {
+		param.Secure = secure
+	}
+	if httpOnly, ok := cookie["httpOnly"].(bool); ok {
+		param.HTTPOnly = httpOnly
+	}
+	// Handle expirationDate (from browser extensions)
+	if exp, ok := cookie["expirationDate"].(float64); ok {
+		param.Expires = proto.TimeSinceEpoch(exp)
+	}
+
+	return bm.page.SetCookies([]*proto.NetworkCookieParam{param})
+}
+
+// ClearCookies clears all cookies for the current page.
+func (bm *BrowserManager) ClearCookies() error {
+	return proto.NetworkClearBrowserCookies{}.Call(bm.page)
 }

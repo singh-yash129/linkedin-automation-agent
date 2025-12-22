@@ -3,15 +3,17 @@ package messaging
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/singh-yash129/link/internal/browser"
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
-	"github.com/singh-yash129/link/internal/search"
-	"github.com/singh-yash129/link/internal/stealth"
-	"github.com/singh-yash129/link/internal/storage"
+	"github.com/go-rod/rod"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/browser"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/search"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/stealth"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/storage"
 )
 
 // MessagingManager handles LinkedIn messaging operations.
@@ -427,4 +429,171 @@ func (mm *MessagingManager) CloseMessageModal() error {
 	}
 
 	return nil
+}
+
+// GetNewlyAcceptedConnections fetches connections that were recently accepted.
+// It checks the "My Network" page for new connection notifications.
+func (mm *MessagingManager) GetNewlyAcceptedConnections() ([]*search.SearchResult, error) {
+	mm.log.Info("Checking for newly accepted connections", nil)
+
+	// Navigate to My Network page
+	if err := mm.browser.Navigate("https://www.linkedin.com/mynetwork/invite-connect/connections/"); err != nil {
+		return nil, fmt.Errorf("failed to navigate to connections: %w", err)
+	}
+
+	mm.stealth.PageDelay()
+	time.Sleep(2 * time.Second)
+
+	var newConnections []*search.SearchResult
+
+	// Look for connection cards
+	connectionSelectors := []string{
+		".mn-connection-card",
+		".artdeco-list__item",
+		"li.mn-connection-card",
+	}
+
+	var elements rod.Elements
+	var err error
+	for _, selector := range connectionSelectors {
+		elements, err = mm.browser.GetElements(selector)
+		if err == nil && len(elements) > 0 {
+			break
+		}
+	}
+
+	if len(elements) == 0 {
+		mm.log.Debug("No connection cards found", nil)
+		return newConnections, nil
+	}
+
+	// Extract connection info
+	for _, el := range elements {
+		result := &search.SearchResult{
+			IsConnection: true,
+		}
+
+		// Extract name
+		nameEl, err := el.Element(".mn-connection-card__name")
+		if err == nil {
+			text, _ := nameEl.Text()
+			result.Name = strings.TrimSpace(text)
+		}
+
+		// Extract occupation/title
+		occEl, err := el.Element(".mn-connection-card__occupation")
+		if err == nil {
+			text, _ := occEl.Text()
+			result.Title = strings.TrimSpace(text)
+		}
+
+		// Extract profile link
+		linkEl, err := el.Element("a[href*='/in/']")
+		if err == nil {
+			href, _ := linkEl.Attribute("href")
+			if href != nil {
+				result.ProfileURL = mm.cleanProfileURL(*href)
+			}
+		}
+
+		// Check if this is a new connection (not already messaged)
+		if result.ProfileURL != "" && !mm.storage.WasMessageSent(result.ProfileURL) {
+			newConnections = append(newConnections, result)
+		}
+	}
+
+	mm.log.Info("Found new connections", map[string]interface{}{
+		"count": len(newConnections),
+	})
+
+	return newConnections, nil
+}
+
+// cleanProfileURL cleans and normalizes a LinkedIn profile URL.
+func (mm *MessagingManager) cleanProfileURL(rawURL string) string {
+	// Parse the URL
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+
+	// Get just the path
+	path := u.Path
+
+	// Ensure it starts with /in/
+	if !strings.HasPrefix(path, "/in/") {
+		return ""
+	}
+
+	// Remove trailing slashes and query params
+	path = strings.TrimSuffix(path, "/")
+
+	return "https://www.linkedin.com" + path
+}
+
+// SendFollowUpToNewConnections sends follow-up messages to newly accepted connections.
+func (mm *MessagingManager) SendFollowUpToNewConnections(messageTemplate string) *BulkMessageResult {
+	result := &BulkMessageResult{
+		StartTime: time.Now(),
+	}
+
+	// Get new connections
+	connections, err := mm.GetNewlyAcceptedConnections()
+	if err != nil {
+		mm.log.Warn("Failed to get new connections", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return result
+	}
+
+	result.Total = len(connections)
+
+	if len(connections) == 0 {
+		mm.log.Info("No new connections to message", nil)
+		return result
+	}
+
+	// Send messages to each new connection
+	for _, conn := range connections {
+		// Check rate limit
+		if !mm.rateLimiter.CanProceed("message") {
+			mm.log.Info("Rate limit reached, stopping follow-up messages", nil)
+			result.Skipped = result.Total - result.Succeeded - result.Failed
+			break
+		}
+
+		// Check schedule
+		mm.stealth.WaitForSchedule()
+
+		// Take break if needed
+		if mm.stealth.ShouldTakeBreak() {
+			mm.stealth.TakeBreak()
+		}
+
+		// Send message
+		if err := mm.SendMessage(conn, messageTemplate); err != nil {
+			mm.log.Warn("Failed to send follow-up", map[string]interface{}{
+				"name":  conn.Name,
+				"error": err.Error(),
+			})
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", conn.Name, err.Error()))
+		} else {
+			result.Succeeded++
+		}
+
+		// Random delay between messages
+		mm.stealth.RandomDelay()
+	}
+
+	result.EndTime = time.Now()
+	result.Duration = result.EndTime.Sub(result.StartTime)
+
+	mm.log.Info("Follow-up messages completed", map[string]interface{}{
+		"succeeded": result.Succeeded,
+		"failed":    result.Failed,
+		"skipped":   result.Skipped,
+	})
+
+	return result
 }

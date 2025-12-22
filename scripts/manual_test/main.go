@@ -9,15 +9,15 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
-	"github.com/singh-yash129/link/internal/auth"
-	"github.com/singh-yash129/link/internal/browser"
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/connection"
-	"github.com/singh-yash129/link/internal/logger"
-	"github.com/singh-yash129/link/internal/messaging"
-	"github.com/singh-yash129/link/internal/search"
-	"github.com/singh-yash129/link/internal/stealth"
-	"github.com/singh-yash129/link/internal/storage"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/auth"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/browser"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/connection"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/messaging"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/search"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/stealth"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/storage"
 )
 
 var (
@@ -509,7 +509,8 @@ func testStealthFeatures() {
 	fmt.Println("  🛡️  STEALTH FEATURES DEMO")
 	fmt.Println(strings.Repeat("=", 60))
 
-	fmt.Println("\n  Testing all 11 anti-detection techniques:\n")
+	fmt.Println("\n  Testing all 11 anti-detection techniques:")
+	fmt.Println()
 
 	fmt.Print("  1. Randomized Timing... ")
 	start := time.Now()

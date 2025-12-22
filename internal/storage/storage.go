@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
 	_ "modernc.org/sqlite"
 )
 

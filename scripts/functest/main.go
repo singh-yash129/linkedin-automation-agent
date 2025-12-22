@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
-	"github.com/singh-yash129/link/internal/stealth"
-	"github.com/singh-yash129/link/internal/storage"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/stealth"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/storage"
 )
 
 // TestResult represents a single test result

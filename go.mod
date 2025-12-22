@@ -1,4 +1,4 @@
-module github.com/singh-yash129/link
+module github.com/singh-yash129/linkedin-automation-agent
 
 go 1.21
 

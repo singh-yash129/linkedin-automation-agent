@@ -3,15 +3,17 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/singh-yash129/link/internal/browser"
-	"github.com/singh-yash129/link/internal/config"
-	"github.com/singh-yash129/link/internal/logger"
-	"github.com/singh-yash129/link/internal/stealth"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/browser"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/config"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/logger"
+	"github.com/singh-yash129/linkedin-automation-agent/internal/stealth"
 )
 
 // Common LinkedIn URLs and selectors
@@ -468,4 +470,96 @@ func (am *AuthManager) HandleSecurityChallenge() error {
 	default:
 		return errors.New("unknown authentication state")
 	}
+}
+
+// ImportCookiesFromJSON imports cookies from a JSON file (e.g., exported from browser extension).
+// The JSON should be an array of cookie objects with name, value, domain, path fields.
+func (am *AuthManager) ImportCookiesFromJSON(jsonPath string) error {
+	am.log.Info("Importing cookies from JSON", map[string]interface{}{
+		"path": jsonPath,
+	})
+
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		return fmt.Errorf("failed to read cookie file: %w", err)
+	}
+
+	var cookies []map[string]interface{}
+	if err := json.Unmarshal(data, &cookies); err != nil {
+		return fmt.Errorf("failed to parse cookies JSON: %w", err)
+	}
+
+	// Navigate to LinkedIn first to set cookies properly
+	if err := am.browser.Navigate("https://www.linkedin.com"); err != nil {
+		return err
+	}
+	time.Sleep(2 * time.Second)
+
+	// Import cookies
+	for _, c := range cookies {
+		if err := am.browser.SetCookie(c); err != nil {
+			am.log.Warn("Failed to set cookie", map[string]interface{}{
+				"name":  c["name"],
+				"error": err.Error(),
+			})
+		}
+	}
+
+	am.log.Info("Cookies imported", map[string]interface{}{
+		"count": len(cookies),
+	})
+
+	// Refresh page to apply cookies
+	if err := am.browser.Navigate(LinkedInHomeURL); err != nil {
+		return err
+	}
+	time.Sleep(3 * time.Second)
+
+	// Verify login
+	if !am.IsLoggedIn() {
+		return errors.New("cookie import failed - not logged in")
+	}
+
+	// Save cookies for future use
+	return am.browser.SaveCookies()
+}
+
+// LoginWithRetry attempts login with automatic retry on transient failures.
+func (am *AuthManager) LoginWithRetry(maxRetries int) error {
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			am.log.Info("Retrying login", map[string]interface{}{
+				"attempt": i + 1,
+			})
+			time.Sleep(time.Duration(i*5) * time.Second)
+		}
+
+		err := am.Login()
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+		authErr, ok := err.(*AuthError)
+		if ok {
+			// Don't retry on credentials error or security challenges
+			if authErr.Type == ErrTypeCredentials ||
+				authErr.Type == ErrTypeCaptcha ||
+				authErr.Type == ErrType2FA ||
+				authErr.Type == ErrTypePhoneVerify ||
+				authErr.Type == ErrTypeAccountLocked {
+				return err
+			}
+		}
+	}
+	return fmt.Errorf("login failed after %d attempts: %w", maxRetries, lastErr)
+}
+
+// EnsureLoggedIn ensures the user is logged in, attempting login if necessary.
+func (am *AuthManager) EnsureLoggedIn() error {
+	if am.IsLoggedIn() {
+		return nil
+	}
+	return am.Login()
 }
