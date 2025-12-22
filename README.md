@@ -292,25 +292,9 @@ Available in note and message templates:
 3. **Legal**: Unauthorized automation may have legal implications
 4. **Educational Only**: This code is for learning purposes only
 
-## 🎥 Demo Video
-
-[Link to demonstration video will be added here]
-
-The demo covers:
-- Tool setup and configuration
-- Authentication flow
-- Search execution
-- Connection request sending
-- Anti-detection techniques in action
 
 ## 📄 License
 
 This project is for educational purposes only. See LICENSE file for details.
-
-## 🤝 Contributing
-
-This is a demonstration project. For educational contributions, please open an issue first.
-
----
 
 **Remember**: This tool demonstrates automation concepts and should never be used on production LinkedIn accounts.
